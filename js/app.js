@@ -238,7 +238,7 @@ function renderRealData(data) {
 
   if (stayMins >= configuredStayTimeoutMin || currentAlertLevel === 4) {
     barStay.style.backgroundColor = 'var(--danger)';
-    valStayStatus.innerText = `🚨 Quá ${configuredStayTimeoutMin}p (Nghi ngất xỉu)!`;
+    valStayStatus.innerText = `⚠️ Ở quá ${configuredStayTimeoutMin}p (Cần kiểm tra)`;
     valStayStatus.style.color = 'var(--danger)';
   } else {
     barStay.style.backgroundColor = 'var(--success)';
@@ -285,7 +285,7 @@ function renderEmergencyBanner(level) {
     bannerText.innerText = '🚬 CẢNH BÁO HÚT THUỐC: Phát hiện khói thuốc / vape!';
   } else if (level === 4) {
     banner.classList.add('show');
-    bannerText.innerText = `⚠️ CẢNH BÁO Y TẾ: Học sinh ở trong WC quá ${configuredStayTimeoutMin} phút!`;
+    bannerText.innerText = `⚠️ CẢNH BÁO: Học sinh ở trong WC quá ${configuredStayTimeoutMin} phút!`;
   } else {
     banner.classList.remove('show');
   }
@@ -332,14 +332,14 @@ function renderSecurityStatus(level, isOnline, data) {
       tag.innerText = "KHÓI THUỐC LÁ";
     }
   } else if (level === 4) {
-    // Ở quá giờ / Ngất xỉu
+    // Ở quá giờ quy định
     card.className = "security-status-card status-warning";
     if (icon) icon.innerText = "⏱️";
-    if (title) title.innerText = "⚠️ CẢNH BÁO Y TẾ: HỌC SINH Ở TRONG WC QUÁ THỜI GIAN!";
-    if (desc) desc.innerText = `Cảm biến PIR ghi nhận học sinh ở trong buồng vượt quá ${configuredStayTimeoutMin} phút. Nghi vấn có dấu hiệu ngất xỉu / mệt mỏi!`;
+    if (title) title.innerText = "⚠️ CẢNH BÁO: HỌC SINH Ở TRONG WC QUÁ THỜI GIAN QUY ĐỊNH!";
+    if (desc) desc.innerText = `Cảm biến PIR ghi nhận học sinh ở trong buồng vượt quá ${configuredStayTimeoutMin} phút. Cần giám thị hoặc bảo vệ kiểm tra hỗ trợ.`;
     if (tag) {
       tag.className = "badge-status-warning";
-      tag.innerText = "NGHI NGẤT XỈU";
+      tag.innerText = "Ở QUÁ GIỜ";
     }
   } else {
     // Bình thường / An toàn
@@ -397,7 +397,7 @@ window.simulateIncident = function(type) {
       currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
     };
     renderRealData(mockData);
-    addLogEntry("Học sinh ở trong WC 12 phút (>10p)", "Mức 4 - Y tế", "badge-warning", "⚠️ Nghi vấn ngất xỉu / trốn tiết");
+    addLogEntry("Học sinh ở trong WC 12 phút (>10p)", "Mức 4 - Quá giờ", "badge-warning", "⚠️ Cần kiểm tra nhắc nhở học sinh");
   } else if (type === 'reset') {
     isSimulationActive = false;
     fetchDeviceStatus();
