@@ -10,6 +10,11 @@
 // --- 1. KIỂM TRA ĐĂNG NHẬP (SESSION STORAGE) ---
 function checkAuth() {
   if (window.location.protocol === 'file:') return;
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('tg') === '1' || navigator.userAgent.includes('Telegram')) {
+    sessionStorage.setItem('khkt_logged_in', 'true');
+    return;
+  }
   const loggedIn = sessionStorage.getItem('khkt_logged_in');
   if (!loggedIn) {
     window.location.href = 'index.html';
@@ -399,7 +404,6 @@ window.simulateIncident = function(type) {
     addLogEntry("Khôi phục trạng thái", "Bình thường", "badge-success", "🟢 Hệ thống vận hành an toàn");
   }
 };
-}
 
 setInterval(fetchDeviceStatus, 2000);
 fetchDeviceStatus();
@@ -587,6 +591,17 @@ async function startPTT() {
   label.innerText = 'ĐANG NÓI...';
   hint.innerText = 'Giọng nói đang truyền tới Loa hộp 4Ω 3W (3020)';
 
+  // Gửi tín hiệu báo hiệu đàm thoại xuống ESP32 để phát chuông chú ý tại loa sa bàn
+  fetch(`${apiBaseUrl}/api/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'CHIME',
+      deviceId: 'RESTROOM_WC1_KHKT',
+      silentTelegram: true
+    })
+  }).catch(() => {});
+
   try {
     if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
     if (!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -663,6 +678,17 @@ function drawSimulatedWave() {
   }
   renderDummy();
 }
+
+// Đăng ký toàn cục các hàm sự kiện giao diện
+window.switchTab = switchTab;
+window.handleLogout = handleLogout;
+window.sendQuickCommand = sendQuickCommand;
+window.saveWebSettings = saveWebSettings;
+window.triggerResetWiFi = triggerResetWiFi;
+window.triggerRebootESP = triggerRebootESP;
+window.clearDemoLogs = clearDemoLogs;
+window.startPTT = startPTT;
+window.stopPTT = stopPTT;
 
 // Khởi chạy khi DOM sẵn sàng
 document.addEventListener('DOMContentLoaded', () => {

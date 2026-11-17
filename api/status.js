@@ -73,10 +73,10 @@ export default async function handler(req, res) {
         state.pendingPayload = body.payload || null;
         saveSharedState(state);
 
-        // Gửi Telegram nếu có cấu hình
+        // Gửi Telegram nếu có cấu hình (bỏ qua nếu có cờ silentTelegram)
         const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8881401798:AAGC-KPh_-abcGM20BYZqaHBMFT-Wvsuuk8';
         const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1461012398';
-        if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
+        if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID && !body.silentTelegram) {
           try {
             await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
               method: 'POST',
