@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const update = req.body;
     console.log("[TELEGRAM WEBHOOK] Received update:", JSON.stringify(update));
 
-    const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8881401798:AAGC-KPh_-abcGM20BYZqaHBMFT-Wvsuuk8';
 
     // Xử lý khi người dùng bấm vào các nút Inline Keyboard
     if (update && update.callback_query) {

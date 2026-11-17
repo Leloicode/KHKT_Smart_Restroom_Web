@@ -74,8 +74,8 @@ export default async function handler(req, res) {
         saveSharedState(state);
 
         // Gửi Telegram nếu có cấu hình
-        const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-        const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+        const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8881401798:AAGC-KPh_-abcGM20BYZqaHBMFT-Wvsuuk8';
+        const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1461012398';
         if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
           try {
             await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
