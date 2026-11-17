@@ -1016,3 +1016,188 @@ body {
     padding: 2px 8px;
   }
 }
+
+/* ========================================================================== */
+/* THẺ TRẠNG THÁI AN NINH TỔNG THỂ & BỘ DEMO TEST                             */
+/* ========================================================================== */
+.security-status-card {
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.security-status-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.security-status-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.security-status-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+
+.security-status-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin: 2px 0;
+}
+
+.security-status-desc {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.security-status-card.status-safe {
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  color: #065f46;
+}
+.security-status-card.status-safe .security-status-badge {
+  background: #d1fae5;
+}
+.badge-status-safe {
+  background: #10b981;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.security-status-card.status-danger {
+  background: #fef2f2;
+  border: 2px solid #ef4444;
+  color: #991b1b;
+  animation: pulseBorder 1.2s infinite alternate;
+}
+.security-status-card.status-danger .security-status-badge {
+  background: #fee2e2;
+}
+.badge-status-danger {
+  background: #ef4444;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: blinkRed 1s infinite alternate;
+}
+
+.security-status-card.status-warning {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  color: #92400e;
+}
+.security-status-card.status-warning .security-status-badge {
+  background: #fef3c7;
+}
+.badge-status-warning {
+  background: #f59e0b;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.demo-test-card {
+  margin-top: 20px;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+}
+.demo-test-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.demo-test-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+.demo-test-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+.demo-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.btn-demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+.btn-demo:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.btn-demo-violence {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.btn-demo-violence:hover {
+  background: #fecaca;
+}
+.btn-demo-smoke {
+  background: #ffedd5;
+  color: #9a3412;
+  border-color: #fdba74;
+}
+.btn-demo-smoke:hover {
+  background: #fed7aa;
+}
+.btn-demo-overtime {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+.btn-demo-overtime:hover {
+  background: #fde68a;
+}
+.btn-demo-reset {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+.btn-demo-reset:hover {
+  background: #e2e8f0;
+}

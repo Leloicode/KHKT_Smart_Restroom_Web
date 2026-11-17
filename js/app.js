@@ -94,8 +94,11 @@ let mediaStream = null;
 let analyser = null;
 let visualizerAnimationId = null;
 
+let isSimulationActive = false;
+
 // --- 6. GỌI API STATUS TỪ ESP32 HOẶC CLOUD ---
 async function fetchDeviceStatus() {
+  if (isSimulationActive) return;
   const statusUrl = `${apiBaseUrl}/api/status`;
   try {
     const res = await fetch(statusUrl, { method: 'GET', cache: 'no-store' });
@@ -149,6 +152,8 @@ function renderStaticIdleState() {
 
   const emergencyBanner = document.getElementById('emergencyBanner');
   if (emergencyBanner) emergencyBanner.classList.remove('show');
+
+  renderSecurityStatus(0, false, null);
 }
 
 // Cập nhật dữ liệu thật nhận từ ESP32
@@ -243,6 +248,7 @@ function renderRealData(data) {
   document.getElementById('barOccupancy').style.width = Math.min(100, occ * 33) + '%';
 
   renderEmergencyBanner(currentAlertLevel);
+  renderSecurityStatus(currentAlertLevel, true, data);
 }
 
 function updateLiveBadge(isLive, customText) {
@@ -278,6 +284,121 @@ function renderEmergencyBanner(level) {
   } else {
     banner.classList.remove('show');
   }
+}
+
+function renderSecurityStatus(level, isOnline, data) {
+  const card = document.getElementById('securityAlertSummary');
+  const icon = document.getElementById('securityStatusIcon');
+  const title = document.getElementById('securityStatusText');
+  const desc = document.getElementById('securityStatusDetail');
+  const tag = document.getElementById('securityStatusTag');
+  if (!card) return;
+
+  if (!isOnline && !isSimulationActive) {
+    card.className = "security-status-card status-safe";
+    if (icon) icon.innerText = "⏳";
+    if (title) title.innerText = "ĐANG CHỜ TÍN HIỆU TỪ SA BÀN ESP32...";
+    if (desc) desc.innerText = "Hệ thống đang sẵn sàng. Khi ESP32 bật nguồn và kết nối WiFi, dữ liệu âm thanh và khói sẽ hiển thị tại đây.";
+    if (tag) {
+      tag.className = "badge badge-warning";
+      tag.innerText = "CHỜ ESP32";
+    }
+    return;
+  }
+
+  if (level === 2) {
+    // Bạo lực / Cãi vã / La hét
+    card.className = "security-status-card status-danger";
+    if (icon) icon.innerText = "🚨";
+    if (title) title.innerText = "🚨 BÁO ĐỘNG ĐỎ: PHÁT HIỆN DẤU HIỆU CÃI VÃ / BẠO LỰC!";
+    if (desc) desc.innerText = "Cảm biến âm thanh KY-038 ghi nhận tiếng la hét dồn dập >85dB kéo dài >1.5s. Còi răn đe tại chỗ đang hú!";
+    if (tag) {
+      tag.className = "badge-status-danger";
+      tag.innerText = "NGUY CƠ BẠO LỰC";
+    }
+  } else if (level === 1) {
+    // Khói thuốc lá / Vape
+    card.className = "security-status-card status-warning";
+    if (icon) icon.innerText = "🚬";
+    if (title) title.innerText = "🚬 CẢNH BÁO: PHÁT HIỆN KHÓI THUỐC LÁ / VAPE!";
+    if (desc) desc.innerText = "Cảm biến khói MQ-2 ghi nhận nồng độ khói vượt ngưỡng quy định. Đèn cảnh báo tại cửa đã kích hoạt!";
+    if (tag) {
+      tag.className = "badge-status-warning";
+      tag.innerText = "KHÓI THUỐC LÁ";
+    }
+  } else if (level === 4) {
+    // Ở quá giờ / Ngất xỉu
+    card.className = "security-status-card status-warning";
+    if (icon) icon.innerText = "⏱️";
+    if (title) title.innerText = "⚠️ CẢNH BÁO Y TẾ: HỌC SINH Ở TRONG WC QUÁ THỜI GIAN!";
+    if (desc) desc.innerText = `Cảm biến PIR ghi nhận học sinh ở trong buồng vượt quá ${configuredStayTimeoutMin} phút. Nghi vấn có dấu hiệu ngất xỉu / mệt mỏi!`;
+    if (tag) {
+      tag.className = "badge-status-warning";
+      tag.innerText = "NGHI NGẤT XỈU";
+    }
+  } else {
+    // Bình thường / An toàn
+    card.className = "security-status-card status-safe";
+    if (icon) icon.innerText = "🛡️";
+    if (title) title.innerText = "🟢 AN TOÀN: KHÔNG CÓ DẤU HIỆU BẠO LỰC HOẶC KHÓI THUỐC";
+    if (desc) desc.innerText = "Âm thanh môi trường ổn định (<60dB), không có khói thuốc lá, thời gian buồng trong giới hạn an toàn.";
+    if (tag) {
+      tag.className = "badge-status-safe";
+      tag.innerText = "AN TOÀN 100%";
+    }
+  }
+}
+
+// BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST TRỰC TIẾP TRÊN WEB)
+window.simulateIncident = function(type) {
+  if (type === 'violence') {
+    isSimulationActive = true;
+    const mockData = {
+      isOnline: true,
+      alertLevel: 2,
+      soundNoise: 88,
+      smokeRaw: 450,
+      presence: true,
+      stayMinutes: 2,
+      occupancy: 2,
+      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+    };
+    renderRealData(mockData);
+    addLogEntry("Báo động âm thanh la hét (>85dB, >1.5s)", "Mức 2 - Khẩn cấp", "badge-danger", "🚨 Phát hiện nguy cơ bạo lực / xô xát");
+  } else if (type === 'smoke') {
+    isSimulationActive = true;
+    const mockData = {
+      isOnline: true,
+      alertLevel: 1,
+      soundNoise: 42,
+      smokeRaw: 2450,
+      presence: true,
+      stayMinutes: 3,
+      occupancy: 1,
+      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+    };
+    renderRealData(mockData);
+    addLogEntry("Cảm biến MQ-2 vượt ngưỡng (2450 ADC)", "Mức 1 - Cảnh báo", "badge-warning", "🚬 Phát hiện khói thuốc lá / Vape");
+  } else if (type === 'overtime') {
+    isSimulationActive = true;
+    const mockData = {
+      isOnline: true,
+      alertLevel: 4,
+      soundNoise: 40,
+      smokeRaw: 420,
+      presence: true,
+      stayMinutes: 12,
+      occupancy: 1,
+      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+    };
+    renderRealData(mockData);
+    addLogEntry("Học sinh ở trong WC 12 phút (>10p)", "Mức 4 - Y tế", "badge-warning", "⚠️ Nghi vấn ngất xỉu / trốn tiết");
+  } else if (type === 'reset') {
+    isSimulationActive = false;
+    fetchDeviceStatus();
+    addLogEntry("Khôi phục trạng thái", "Bình thường", "badge-success", "🟢 Hệ thống vận hành an toàn");
+  }
+};
 }
 
 setInterval(fetchDeviceStatus, 2000);

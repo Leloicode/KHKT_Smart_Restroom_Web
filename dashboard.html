@@ -86,12 +86,27 @@
     <!-- ==================================================================== -->
     <div id="tabContentMonitor" class="tab-content active">
 
+      <!-- THẺ TRẠNG THÁI AN NINH TỔNG THỂ (HIỂN THỊ CÃI VÃ / KHÓI THUỐC / AN TOÀN) -->
+      <div id="securityAlertSummary" class="security-status-card status-safe">
+        <div class="security-status-left">
+          <div id="securityStatusIcon" class="security-status-badge">🛡️</div>
+          <div>
+            <div class="security-status-label">TRẠNG THÁI AN NINH HIỆN TẠI:</div>
+            <div id="securityStatusText" class="security-status-title">🟢 AN TOÀN - KHÔNG CÓ DẤU HIỆU BẤT THƯỜNG</div>
+            <div id="securityStatusDetail" class="security-status-desc">Hệ thống đang quét liên tục âm thanh bạo lực, khói thuốc lá và thời gian lưu trú.</div>
+          </div>
+        </div>
+        <div class="security-status-actions">
+          <span id="securityStatusTag" class="badge-status-safe">HOẠT ĐỘNG TỐT</span>
+        </div>
+      </div>
+
       <!-- LƯỚI 4 CẢM BIẾN CHÍNH (2X2 MOBILE ĐỐI XỨNG, 4 CỘT DESKTOP) -->
       <div class="metrics-grid">
         <!-- 1. Cảm biến âm thanh KY-038 -->
         <div class="metric-card" id="cardSound">
           <div class="metric-header">
-            <span class="metric-title">ĐỘ ỒN KY-038</span>
+            <span class="metric-title">BẠO LỰC / LA HÉT (KY-038)</span>
             <div class="metric-icon-circle icon-blue">🎙️</div>
           </div>
           <div class="metric-value" id="valSoundNoise">-- <small>dB</small></div>
@@ -104,7 +119,7 @@
         <!-- 2. Cảm biến khói MQ-2 -->
         <div class="metric-card" id="cardSmoke">
           <div class="metric-header">
-            <span class="metric-title">KHÓI MQ-2</span>
+            <span class="metric-title">KHÓI THUỐC & VAPE (MQ-2)</span>
             <div class="metric-icon-circle icon-orange">💨</div>
           </div>
           <div class="metric-value" id="valSmokeRaw">-- <small>ADC</small></div>
@@ -117,7 +132,7 @@
         <!-- 3. Cảm biến thời gian ở trong WC -->
         <div class="metric-card" id="cardStayTime">
           <div class="metric-header">
-            <span class="metric-title">THỜI GIAN BUỒNG</span>
+            <span class="metric-title">THỜI GIAN BUỒNG (NGẤT XỈU)</span>
             <div class="metric-icon-circle icon-purple">⏱️</div>
           </div>
           <div class="metric-value" id="valStayTime">00:00 <small id="valStayLimit">/ 10p</small></div>
@@ -130,7 +145,7 @@
         <!-- 4. Cảm biến chuyển động PIR & Đếm số người -->
         <div class="metric-card" id="cardOccupancy">
           <div class="metric-header">
-            <span class="metric-title">HIỆN DIỆN & NGƯỜI</span>
+            <span class="metric-title">HIỆN DIỆN & SỐ NGƯỜI (PIR/IR)</span>
             <div class="metric-icon-circle icon-indigo">👥</div>
           </div>
           <div class="metric-value" id="valOccupancy">0 <small>học sinh</small></div>
@@ -185,6 +200,31 @@
           <div class="hint-box">
             💡 <strong>Mẹo:</strong> Âm thanh sẽ phát trực tiếp qua mạch giải mã I2S DAC MAX98357A và Loa hộp 4Ω 3W (3020) trên mô hình sa bàn.
           </div>
+        </div>
+      </div>
+
+      <!-- BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST) -->
+      <div class="card demo-test-card">
+        <div class="demo-test-header">
+          <div>
+            <h3 class="demo-test-title">🧪 Thử Nghiệm Mô Phỏng Sự Cố Phần Cứng (Demo Sa Bàn)</h3>
+            <p class="demo-test-desc">Bấm nhanh các nút dưới đây để kiểm tra trực quan phản ứng cảnh báo tức thì của hệ thống (Đổi màu đỏ, hú còi, banner khẩn cấp):</p>
+          </div>
+          <span class="badge badge-info">Dành Cho Trình Chiếu</span>
+        </div>
+        <div class="demo-buttons-row">
+          <button type="button" class="btn-demo btn-demo-violence" onclick="simulateIncident('violence')">
+            <span>🚨</span> Thử Dấu Hiệu Cãi Vã / Bạo Lực
+          </button>
+          <button type="button" class="btn-demo btn-demo-smoke" onclick="simulateIncident('smoke')">
+            <span>🚬</span> Thử Dấu Hiệu Khói Thuốc Lá
+          </button>
+          <button type="button" class="btn-demo btn-demo-overtime" onclick="simulateIncident('overtime')">
+            <span>⏱️</span> Thử Ở Quá 10 Phút (Ngất Xỉu)
+          </button>
+          <button type="button" class="btn-demo btn-demo-reset" onclick="simulateIncident('reset')">
+            <span>🔄</span> Khôi Phục Dữ Liệu Thực
+          </button>
         </div>
       </div>
 
