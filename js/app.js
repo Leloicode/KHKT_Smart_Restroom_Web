@@ -147,7 +147,7 @@ function renderStaticIdleState() {
   document.getElementById('barSmoke').style.backgroundColor = "var(--success)";
 
   document.getElementById('valStayTime').innerHTML = `00:00 <small id="valStayLimit">/ ${configuredStayTimeoutMin}p</small>`;
-  document.getElementById('valStayStatus').innerText = "Buồng đang trống";
+  document.getElementById('valStayStatus').innerText = "Chưa có người";
   document.getElementById('valStayStatus').style.color = "var(--text-muted)";
   document.getElementById('barStayTime').style.width = "0%";
 
@@ -242,14 +242,14 @@ function renderRealData(data) {
     valStayStatus.style.color = 'var(--danger)';
   } else {
     barStay.style.backgroundColor = 'var(--success)';
-    valStayStatus.innerText = data.presence ? `Có người (${stayMins} phút)` : "Buồng đang trống";
+    valStayStatus.innerText = data.presence ? `Có người (${stayMins} phút)` : "Chưa có người";
     valStayStatus.style.color = 'var(--text-muted)';
   }
 
   // 4. Hiện diện & số học sinh
   const occ = data.occupancy || 0;
   document.getElementById('valOccupancy').innerHTML = `${occ} <small>học sinh</small>`;
-  document.getElementById('valPresence').innerText = data.presence ? 'PIR: Có người trong buồng' : 'PIR: Buồng trống';
+  document.getElementById('valPresence').innerText = data.presence ? 'PIR: Có người trong WC' : 'PIR: Phòng trống';
   document.getElementById('barOccupancy').style.width = Math.min(100, occ * 33) + '%';
 
   renderEmergencyBanner(currentAlertLevel);
@@ -336,7 +336,7 @@ function renderSecurityStatus(level, isOnline, data) {
     card.className = "security-status-card status-warning";
     if (icon) icon.innerText = "⏱️";
     if (title) title.innerText = "⚠️ CẢNH BÁO: HỌC SINH Ở TRONG WC QUÁ THỜI GIAN QUY ĐỊNH!";
-    if (desc) desc.innerText = `Cảm biến PIR ghi nhận học sinh ở trong buồng vượt quá ${configuredStayTimeoutMin} phút. Cần giám thị hoặc bảo vệ kiểm tra hỗ trợ.`;
+    if (desc) desc.innerText = `Cảm biến PIR ghi nhận học sinh ở trong WC vượt quá ${configuredStayTimeoutMin} phút. Cần giám thị hoặc bảo vệ kiểm tra hỗ trợ.`;
     if (tag) {
       tag.className = "badge-status-warning";
       tag.innerText = "Ở QUÁ GIỜ";
@@ -346,7 +346,7 @@ function renderSecurityStatus(level, isOnline, data) {
     card.className = "security-status-card status-safe";
     if (icon) icon.innerText = "🛡️";
     if (title) title.innerText = "🟢 AN TOÀN: KHÔNG CÓ DẤU HIỆU BẠO LỰC HOẶC KHÓI THUỐC";
-    if (desc) desc.innerText = "Âm thanh môi trường ổn định (<60dB), không có khói thuốc lá, thời gian buồng trong giới hạn an toàn.";
+    if (desc) desc.innerText = "Âm thanh môi trường ổn định (<60dB), không có khói thuốc lá, thời gian ở trong WC trong giới hạn an toàn.";
     if (tag) {
       tag.className = "badge-status-safe";
       tag.innerText = "AN TOÀN 100%";
