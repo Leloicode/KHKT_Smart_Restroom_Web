@@ -84,6 +84,51 @@ export default async function handler(req, res) {
       }
     }
 
+    // Xử lý khi giám thị gửi Tin nhắn thoại (Voice Message) hoặc tin nhắn Text
+    if (update && update.message) {
+      const msg = update.message;
+      const chatId = msg.chat.id;
+      let queuedCmd = null;
+      let replyText = null;
+
+      if (msg.voice) {
+        queuedCmd = "CHIME";
+        replyText = "🎙️ Đã nhận tin nhắn thoại từ Thầy/Cô! Đang kích hoạt chuông chú ý can thiệp ra Loa 3020 tại sa bàn.";
+      } else if (msg.text) {
+        const txt = msg.text.trim().toLowerCase();
+        if (txt.startsWith("/siren") || txt.includes("coi")) {
+          queuedCmd = "SIREN";
+          replyText = "🚨 Đã kích hoạt Còi Báo Động Hú Răn Đe!";
+        } else if (txt.startsWith("/smoke") || txt.includes("thuoc")) {
+          queuedCmd = "SMOKE";
+          replyText = "⚠️ Đã phát chuỗi âm thanh Cảnh Báo Cấm Hút Thuốc!";
+        } else if (txt.startsWith("/guard") || txt.includes("baove")) {
+          queuedCmd = "CHIME";
+          replyText = "👮 Đã phát thông báo Bảo Vệ Đang Di Chuyển Tới Hiện Trường!";
+        } else if (txt.startsWith("/reset") || txt.includes("tat")) {
+          queuedCmd = "RESET";
+          replyText = "✅ Đã hủy trạng thái báo động, đưa hệ thống về An Toàn.";
+        }
+      }
+
+      if (queuedCmd) {
+        const state = getSharedState();
+        state.pendingCommand = queuedCmd;
+        saveSharedState(state);
+
+        if (TELEGRAM_TOKEN && replyText) {
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: replyText
+            })
+          });
+        }
+      }
+    }
+
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("Webhook processing error:", err);
