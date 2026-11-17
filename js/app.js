@@ -100,26 +100,45 @@ let analyser = null;
 let visualizerAnimationId = null;
 
 let isSimulationActive = false;
+let previousOnlineStatus = null;
 
 // --- 6. GỌI API STATUS TỪ ESP32 HOẶC CLOUD ---
 async function fetchDeviceStatus() {
-  if (isSimulationActive) return;
-  const statusUrl = `${apiBaseUrl}/api/status`;
+  const statusUrl = `${apiBaseUrl}/api/status?_t=${Date.now()}`;
   try {
     const res = await fetch(statusUrl, { method: 'GET', cache: 'no-store' });
     if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
 
     if (data.isOnline) {
+      // Khi ESP32 trực tuyến: ƯU TIÊN 100% DỮ LIỆU THẬT TỪ PHẦN CỨNG
+      // Tự động hủy mọi chế độ mô phỏng
+      isSimulationActive = false;
       isEsp32Online = true;
+
+      if (previousOnlineStatus === false || previousOnlineStatus === null) {
+        addLogEntry("Phần cứng ESP32 đã kết nối", data.currentWifi || "WiFi Sa Bàn", "badge-success", "🟢 Thiết bị trực tuyến - Nhận dữ liệu thực 100%");
+      }
+      previousOnlineStatus = true;
       renderRealData(data);
     } else {
       isEsp32Online = false;
-      renderStaticIdleState();
+      if (previousOnlineStatus === true) {
+        addLogEntry("Mất kết nối ESP32", "Ngoại tuyến", "badge-warning", "⚠️ Mất tín hiệu heartbeat từ vi điều khiển");
+      }
+      previousOnlineStatus = false;
+
+      // Nếu không có bấm thử nghiệm tạm thời, hiển thị trạng thái chờ sạch sẽ
+      if (!isSimulationActive) {
+        renderStaticIdleState();
+      }
     }
   } catch (err) {
     isEsp32Online = false;
-    renderStaticIdleState();
+    previousOnlineStatus = false;
+    if (!isSimulationActive) {
+      renderStaticIdleState();
+    }
   }
 }
 
@@ -163,17 +182,23 @@ function renderStaticIdleState() {
 
 // Cập nhật dữ liệu thật nhận từ ESP32
 function renderRealData(data) {
-  updateLiveBadge(true);
+  const isOnline = !!data.isOnline;
+  updateLiveBadge(isOnline);
 
-  document.getElementById('valConnectionStatus').className = "badge badge-success";
-  document.getElementById('valConnectionStatus').innerText = "🟢 Trực tuyến";
+  if (isOnline) {
+    document.getElementById('valConnectionStatus').className = "badge badge-success";
+    document.getElementById('valConnectionStatus').innerText = "🟢 Trực tuyến";
+  } else {
+    document.getElementById('valConnectionStatus').className = "badge badge-warning";
+    document.getElementById('valConnectionStatus').innerText = "Chờ kết nối ESP32";
+  }
 
   currentAlertLevel = data.alertLevel || 0;
   configuredStayTimeoutMin = data.stayTimeoutSetting || configuredStayTimeoutMin;
-  currentConnectedWifi = data.currentWifi || "WiFi Trường Học";
+  currentConnectedWifi = data.currentWifi || (isOnline ? "WiFi Sa Bàn" : "Chưa kết nối");
 
   document.getElementById('valCurrentWifi').innerText = currentConnectedWifi;
-  document.getElementById('valCurrentWifi').style.color = "var(--primary)";
+  document.getElementById('valCurrentWifi').style.color = isOnline ? "var(--primary)" : "var(--text-muted)";
   document.getElementById('settingsWifiStatus').innerText = currentConnectedWifi;
 
   // Tự động đồng bộ các thanh trượt trong Tab Cài Đặt theo giá trị thực lưu trong Flash ESP32
@@ -373,55 +398,76 @@ async function sendHardwareCommand(cmd) {
 
 // BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST TRỰC TIẾP TRÊN WEB VÀ SA BÀN)
 window.simulateIncident = function(type) {
+  if (isEsp32Online) {
+    // 1. KHI PHẦN CỨNG ESP32 ĐANG BẬT & TRỰC TUYẾN:
+    // GỬI LỆNH THẬT XUỐNG ESP32 ĐỂ SA BÀN PHẢN HỒI THẬT 100% (KHÔNG TỰ TẠO DỮ LIỆU ẢO)
+    if (type === 'violence') {
+      sendHardwareCommand('SIREN');
+      addLogEntry("🚨 Lệnh kiểm tra: Báo động bạo lực", "Gửi xuống ESP32", "badge-danger", "Đã kích hoạt còi răn đe & đèn chớp sa bàn");
+    } else if (type === 'smoke') {
+      sendHardwareCommand('SMOKE');
+      addLogEntry("🚬 Lệnh kiểm tra: Cảnh báo khói", "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt cảnh báo khói thuốc sa bàn");
+    } else if (type === 'overtime') {
+      sendHardwareCommand('OVERTIME');
+      addLogEntry("⏱️ Lệnh kiểm tra: Ở quá 10 phút", "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt chuông nhắc nhở quá giờ sa bàn");
+    } else if (type === 'reset') {
+      sendHardwareCommand('RESET');
+      addLogEntry("🟢 Khôi phục an toàn", "Gửi xuống ESP32", "badge-success", "Đã đặt lại trạng thái bình thường cho phần cứng");
+    }
+    setTimeout(fetchDeviceStatus, 500);
+    return;
+  }
+
+  // 2. KHI ESP32 CHƯA BẬT NGUỒN: MÔ PHỎNG GIAO DIỆN TẠM THỜI (PREVIEW CHO GIÁM KHẢO XEM GIAO DIỆN)
   if (type === 'violence') {
     isSimulationActive = true;
     const mockData = {
-      isOnline: true,
+      isOnline: false,
       alertLevel: 2,
       soundNoise: 88,
       smokeRaw: 450,
       presence: true,
       stayMinutes: 2,
       occupancy: 2,
-      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+      currentWifi: "Chờ kết nối ESP32"
     };
     renderRealData(mockData);
-    addLogEntry("Báo động âm thanh la hét (>85dB, >1.5s)", "Mức 2 - Khẩn cấp", "badge-danger", "🚨 Phát hiện nguy cơ bạo lực / xô xát");
+    addLogEntry("Thử nghiệm dấu hiệu âm thanh la hét", "Mức 2 - Khẩn cấp", "badge-danger", "🚨 Xem trước giao diện báo động bạo lực");
     sendHardwareCommand('SIREN');
   } else if (type === 'smoke') {
     isSimulationActive = true;
     const mockData = {
-      isOnline: true,
+      isOnline: false,
       alertLevel: 1,
       soundNoise: 42,
       smokeRaw: 2450,
       presence: true,
       stayMinutes: 3,
       occupancy: 1,
-      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+      currentWifi: "Chờ kết nối ESP32"
     };
     renderRealData(mockData);
-    addLogEntry("Cảm biến MQ-2 vượt ngưỡng (2450 ADC)", "Mức 1 - Cảnh báo", "badge-warning", "🚬 Phát hiện khói thuốc lá / Vape");
+    addLogEntry("Thử nghiệm cảm biến khói vượt ngưỡng", "Mức 1 - Cảnh báo", "badge-warning", "🚬 Xem trước giao diện cảnh báo khói thuốc");
     sendHardwareCommand('SMOKE');
   } else if (type === 'overtime') {
     isSimulationActive = true;
     const mockData = {
-      isOnline: true,
+      isOnline: false,
       alertLevel: 4,
       soundNoise: 40,
       smokeRaw: 420,
       presence: true,
       stayMinutes: 12,
       occupancy: 1,
-      currentWifi: "WiFi_THCS_NguyenCongTru (Mô Phỏng)"
+      currentWifi: "Chờ kết nối ESP32"
     };
     renderRealData(mockData);
-    addLogEntry("Học sinh ở trong WC 12 phút (>10p)", "Mức 4 - Quá giờ", "badge-warning", "⚠️ Cần kiểm tra nhắc nhở học sinh");
+    addLogEntry("Thử nghiệm thời gian ở quá 10 phút", "Mức 4 - Quá giờ", "badge-warning", "⏱️ Xem trước giao diện cảnh báo ở quá giờ");
     sendHardwareCommand('OVERTIME');
   } else if (type === 'reset') {
     isSimulationActive = false;
-    fetchDeviceStatus();
-    addLogEntry("Khôi phục trạng thái", "Bình thường", "badge-success", "🟢 Hệ thống vận hành an toàn");
+    renderStaticIdleState();
+    addLogEntry("Khôi phục trạng thái chờ", "Bình thường", "badge-success", "🟢 Hệ thống sẵn sàng kết nối");
     sendHardwareCommand('RESET');
   }
 };
