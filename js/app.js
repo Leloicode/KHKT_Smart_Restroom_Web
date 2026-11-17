@@ -354,7 +354,24 @@ function renderSecurityStatus(level, isOnline, data) {
   }
 }
 
-// BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST TRỰC TIẾP TRÊN WEB)
+// Hàm gửi lệnh điều khiển xuống mạch phần cứng ESP32 qua Cloud
+async function sendHardwareCommand(cmd) {
+  const controlUrl = `${apiBaseUrl}/api/status`;
+  try {
+    await fetch(controlUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: cmd,
+        deviceId: 'RESTROOM_WC1_KHKT'
+      })
+    });
+  } catch (e) {
+    console.log("Offline hardware command:", cmd);
+  }
+}
+
+// BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST TRỰC TIẾP TRÊN WEB VÀ SA BÀN)
 window.simulateIncident = function(type) {
   if (type === 'violence') {
     isSimulationActive = true;
@@ -370,6 +387,7 @@ window.simulateIncident = function(type) {
     };
     renderRealData(mockData);
     addLogEntry("Báo động âm thanh la hét (>85dB, >1.5s)", "Mức 2 - Khẩn cấp", "badge-danger", "🚨 Phát hiện nguy cơ bạo lực / xô xát");
+    sendHardwareCommand('SIREN');
   } else if (type === 'smoke') {
     isSimulationActive = true;
     const mockData = {
@@ -384,6 +402,7 @@ window.simulateIncident = function(type) {
     };
     renderRealData(mockData);
     addLogEntry("Cảm biến MQ-2 vượt ngưỡng (2450 ADC)", "Mức 1 - Cảnh báo", "badge-warning", "🚬 Phát hiện khói thuốc lá / Vape");
+    sendHardwareCommand('SMOKE');
   } else if (type === 'overtime') {
     isSimulationActive = true;
     const mockData = {
@@ -398,10 +417,12 @@ window.simulateIncident = function(type) {
     };
     renderRealData(mockData);
     addLogEntry("Học sinh ở trong WC 12 phút (>10p)", "Mức 4 - Quá giờ", "badge-warning", "⚠️ Cần kiểm tra nhắc nhở học sinh");
+    sendHardwareCommand('OVERTIME');
   } else if (type === 'reset') {
     isSimulationActive = false;
     fetchDeviceStatus();
     addLogEntry("Khôi phục trạng thái", "Bình thường", "badge-success", "🟢 Hệ thống vận hành an toàn");
+    sendHardwareCommand('RESET');
   }
 };
 
@@ -515,6 +536,9 @@ async function sendQuickCommand(cmd) {
   } else if (cmd === 'SMOKE') {
     currentAlertLevel = 1;
     addLogEntry("🚬 Cảnh báo cấm hút thuốc", "Lệnh từ Quản trị viên Web", "badge-warning", "Đã phát tới loa hộp 3020 4R 3W");
+  } else if (cmd === 'OVERTIME') {
+    currentAlertLevel = 4;
+    addLogEntry("⏱️ Cảnh báo ở quá 10 phút", "Lệnh từ Quản trị viên Web", "badge-warning", "Đã phát chuông nhắc nhở tới loa hộp 3020 4R 3W");
   } else if (cmd === 'RESET') {
     currentAlertLevel = 0;
     addLogEntry("✅ Hủy trạng thái báo động", "Lệnh từ Quản trị viên Web", "badge-success", "Khôi phục trạng thái an toàn");

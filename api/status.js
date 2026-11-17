@@ -77,13 +77,19 @@ export default async function handler(req, res) {
         const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8881401798:AAGC-KPh_-abcGM20BYZqaHBMFT-Wvsuuk8';
         const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1461012398';
         if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID && !body.silentTelegram) {
+          let cmdDesc = body.command;
+          if (body.command === "SIREN") cmdDesc = "🚨 KÍCH HOẠT CÒI HÚ RĂN ĐE BẠO LỰC";
+          else if (body.command === "SMOKE") cmdDesc = "🚬 PHÁT CẢNH BÁO CẤM HÚT THUỐC";
+          else if (body.command === "OVERTIME") cmdDesc = "⏱️ PHÁT CHUÔNG NHẮC NHỞ Ở QUÁ 10 PHÚT";
+          else if (body.command === "RESET") cmdDesc = "✅ HỦY BÁO ĐỘNG (KHÔI PHỤC AN TOÀN)";
+
           try {
             await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 chat_id: TELEGRAM_CHAT_ID,
-                text: `📢 *LỆNH TỪ WEB DASHBOARD:*\n• Lệnh: *${body.command}*\n• Thời gian: ${now.toLocaleTimeString('vi-VN')}`,
+                text: `📢 *LỆNH ĐIỀU KHIỂN SA BÀN:*\n• ${cmdDesc}\n• Thời gian: ${now.toLocaleTimeString('vi-VN')}`,
                 parse_mode: 'Markdown'
               })
             });
