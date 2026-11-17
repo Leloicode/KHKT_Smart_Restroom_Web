@@ -1,0 +1,15 @@
+{
+  "name": "khkt-smart-restroom-dashboard",
+  "version": "1.0.0",
+  "description": "Hệ thống IoT giám sát an toàn và cảnh báo sớm bạo lực học đường trong nhà vệ sinh - Cuộc thi KHKT 2026-2027",
+  "main": "api/status.js",
+  "type": "module",
+  "scripts": {
+    "start": "serve ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}
+

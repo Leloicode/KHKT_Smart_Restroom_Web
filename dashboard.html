@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Bảng Điều Khiển Giám Sát An Toàn WC Học Đường 24/7 | KHKT 2026-2027</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- HEADER THANH TIÊU ĐỀ CHÍNH -->
+  <header class="header">
+    <div class="header-container">
+      <div class="brand-section">
+        <div class="brand-icon">🛡️</div>
+        <div class="brand-text">
+          <h1>AN TOÀN WC HỌC ĐƯỜNG</h1>
+          <p>THCS Nguyễn Công Trứ • KHKT 2026-2027</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div id="headerBadgeLive" class="badge-live offline">
+          <div id="headerPulseDot" class="pulse-dot offline"></div>
+          <span id="headerLiveText">CHỜ ESP32</span>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()" title="Đăng xuất khỏi hệ thống">
+          <span>🚪</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- BANNER CẢNH BÁO KHẨN CẤP (CHỈ HIỆN KHI CÓ SỰ CỐ) -->
+  <div id="emergencyBanner" class="emergency-banner">
+    <div class="emergency-content">
+      <span class="emergency-icon" id="emergencyBannerIcon">🚨</span>
+      <span class="emergency-text" id="emergencyBannerText">PHÁT HIỆN SỰ CỐ TẠI NHÀ VỆ SINH!</span>
+    </div>
+    <button onclick="sendQuickCommand('RESET')" class="btn-cancel-alert">
+      HỦY BÁO ĐỘNG
+    </button>
+  </div>
+
+  <!-- THANH ĐIỀU HƯỚNG TABS DẠNG SEGMENTED CONTROL HIỆN ĐẠI -->
+  <div class="tab-bar-wrapper">
+    <div class="tab-bar-container">
+      <div class="segmented-control">
+        <button class="segment-btn active" id="tabBtnMonitor" onclick="switchTab('monitor')">
+          <span class="tab-icon">📊</span>
+          <span>Giám Sát Trực Tiếp</span>
+        </button>
+        <button class="segment-btn" id="tabBtnSettings" onclick="switchTab('settings')">
+          <span class="tab-icon">⚙️</span>
+          <span>Cài Đặt & Cấu Hình</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NỘI DUNG CHÍNH -->
+  <main class="container">
+
+    <!-- THẺ TRẠNG THÁI TRẠM THỰC NGHIỆM -->
+    <div class="station-status-card">
+      <div class="station-main-info">
+        <div class="station-icon-tag">📍</div>
+        <div>
+          <div class="station-title">Trạm Sa Bàn Thực Nghiệm WC</div>
+          <div class="station-sub">Mã trạm: <strong id="valDeviceId">RESTROOM_WC1_KHKT</strong></div>
+        </div>
+      </div>
+      <div class="station-chips-row">
+        <div class="chip-item">
+          <span class="chip-icon">📶</span>
+          <span class="chip-label">WiFi:</span>
+          <strong id="valCurrentWifi" class="chip-val">Chưa kết nối</strong>
+        </div>
+        <div class="chip-item">
+          <span id="valConnectionStatus" class="badge badge-warning">Chờ kết nối ESP32</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 1: GIÁM SÁT TRỰC TIẾP -->
+    <!-- ==================================================================== -->
+    <div id="tabContentMonitor" class="tab-content active">
+
+      <!-- LƯỚI 4 CẢM BIẾN CHÍNH (2X2 MOBILE ĐỐI XỨNG, 4 CỘT DESKTOP) -->
+      <div class="metrics-grid">
+        <!-- 1. Cảm biến âm thanh KY-038 -->
+        <div class="metric-card" id="cardSound">
+          <div class="metric-header">
+            <span class="metric-title">ĐỘ ỒN KY-038</span>
+            <div class="metric-icon-circle icon-blue">🎙️</div>
+          </div>
+          <div class="metric-value" id="valSoundNoise">-- <small>dB</small></div>
+          <div class="metric-subtitle" id="valSoundStatus">Đang chờ tín hiệu...</div>
+          <div class="gauge-bar-bg">
+            <div id="barSound" class="gauge-bar-fill" style="width: 0%; background-color: var(--success);"></div>
+          </div>
+        </div>
+
+        <!-- 2. Cảm biến khói MQ-2 -->
+        <div class="metric-card" id="cardSmoke">
+          <div class="metric-header">
+            <span class="metric-title">KHÓI MQ-2</span>
+            <div class="metric-icon-circle icon-orange">💨</div>
+          </div>
+          <div class="metric-value" id="valSmokeRaw">-- <small>ADC</small></div>
+          <div class="metric-subtitle" id="valSmokeStatus">Đang chờ tín hiệu...</div>
+          <div class="gauge-bar-bg">
+            <div id="barSmoke" class="gauge-bar-fill" style="width: 0%; background-color: var(--success);"></div>
+          </div>
+        </div>
+
+        <!-- 3. Cảm biến thời gian ở trong WC -->
+        <div class="metric-card" id="cardStayTime">
+          <div class="metric-header">
+            <span class="metric-title">THỜI GIAN BUỒNG</span>
+            <div class="metric-icon-circle icon-purple">⏱️</div>
+          </div>
+          <div class="metric-value" id="valStayTime">00:00 <small id="valStayLimit">/ 10p</small></div>
+          <div class="metric-subtitle" id="valStayStatus">Buồng đang trống</div>
+          <div class="gauge-bar-bg">
+            <div id="barStayTime" class="gauge-bar-fill" style="width: 0%; background-color: var(--success);"></div>
+          </div>
+        </div>
+
+        <!-- 4. Cảm biến chuyển động PIR & Đếm số người -->
+        <div class="metric-card" id="cardOccupancy">
+          <div class="metric-header">
+            <span class="metric-title">HIỆN DIỆN & NGƯỜI</span>
+            <div class="metric-icon-circle icon-indigo">👥</div>
+          </div>
+          <div class="metric-value" id="valOccupancy">0 <small>học sinh</small></div>
+          <div class="metric-subtitle" id="valPresence">PIR: Phòng trống</div>
+          <div class="gauge-bar-bg">
+            <div id="barOccupancy" class="gauge-bar-fill" style="width: 0%; background-color: var(--primary);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BẢNG ĐIỀU KHIỂN & ĐÀM THOẠI PTT -->
+      <div class="control-section">
+        <!-- Cột 1: Mic Push-To-Talk -->
+        <div class="card ptt-card">
+          <h2 class="card-title">🎙️ Đàm Thoại Trực Tiếp (Push-to-Talk)</h2>
+          <p class="card-desc">
+            Giáo viên nhấn giữ nút mic bên dưới để nói trực tiếp tới Loa hộp 4Ω 3W (3020) trong WC nhằm can thiệp và ngăn chặn kịp thời.
+          </p>
+
+          <div class="ptt-container">
+            <button id="btnPtt" class="btn-ptt" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT()" ontouchend="stopPTT()">
+              <span class="btn-ptt-icon">🎙️</span>
+              <span class="btn-ptt-label" id="pttLabel">NHẤN GIỮ ĐỂ NÓI</span>
+            </button>
+            <div class="ptt-hint" id="pttHint">Chạm & giữ nút tròn để phát giọng nói</div>
+            <canvas id="audioVisualizer" width="280" height="42" class="audio-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Cột 2: Thao tác nhanh khẩn cấp -->
+        <div class="card action-card">
+          <h2 class="card-title">⚡ Thao Tác Nhanh Khẩn Cấp</h2>
+          <p class="card-desc">
+            Gửi lệnh kích hoạt chuông báo hoặc hủy báo động trực tiếp xuống thiết bị ESP32:
+          </p>
+
+          <div class="action-grid">
+            <button class="btn-action btn-danger" onclick="sendQuickCommand('SIREN')">
+              <span class="btn-icon">🚨</span>
+              <span>Kích Hoạt Còi Hú Răn Đe Bạo Lực</span>
+            </button>
+            <button class="btn-action btn-warning" onclick="sendQuickCommand('SMOKE')">
+              <span class="btn-icon">🚬</span>
+              <span>Phát Cảnh Báo Nhắc Cấm Hút Thuốc</span>
+            </button>
+            <button class="btn-action btn-success" onclick="sendQuickCommand('RESET')">
+              <span class="btn-icon">✅</span>
+              <span>Tắt Báo Động & Khôi Phục Bình Thường</span>
+            </button>
+          </div>
+
+          <div class="hint-box">
+            💡 <strong>Mẹo:</strong> Âm thanh sẽ phát trực tiếp qua mạch giải mã I2S DAC MAX98357A và Loa hộp 4Ω 3W (3020) trên mô hình sa bàn.
+          </div>
+        </div>
+      </div>
+
+      <!-- BẢNG NHẬT KÝ SỰ CỐ & HOẠT ĐỘNG -->
+      <div class="card logs-card">
+        <div class="card-header-row">
+          <h2 class="card-title" style="margin-bottom: 0;">📋 Nhật Ký Hoạt Động & Sự Cố</h2>
+          <button onclick="clearDemoLogs()" class="btn-clear-logs">
+            Xóa nhật ký
+          </button>
+        </div>
+
+        <!-- Bảng hiển thị trên máy tính / iPad -->
+        <div class="table-responsive desktop-logs-table">
+          <table class="table-logs">
+            <thead>
+              <tr>
+                <th>Thời Gian</th>
+                <th>Vị Trí</th>
+                <th>Sự Kiện</th>
+                <th>Chỉ Số</th>
+                <th>Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr>
+                <td id="initialLogTime">08:00:00</td>
+                <td>Sa Bàn WC Thực Nghiệm</td>
+                <td><span class="badge badge-info">Sẵn sàng vận hành</span></td>
+                <td>Trạng thái hệ thống: Sẵn sàng</td>
+                <td>Chờ kết nối ESP32</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Danh sách dạng thẻ card hiển thị trên điện thoại (Không bị tràn ngang) -->
+        <div class="mobile-logs-list" id="mobileLogsList">
+          <div class="log-card-item">
+            <div class="log-card-top">
+              <span class="badge badge-info">Sẵn sàng vận hành</span>
+              <span class="log-card-time" id="mobileInitialLogTime">08:00:00</span>
+            </div>
+            <div class="log-card-detail">Hệ thống sẵn sàng • Chờ kết nối ESP32</div>
+            <div class="log-card-location">📍 Sa Bàn WC Thực Nghiệm</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 2: CÀI ĐẶT & CẤU HÌNH -->
+    <!-- ==================================================================== -->
+    <div id="tabContentSettings" class="tab-content">
+
+      <div class="settings-grid">
+
+        <!-- CỘT 1: CẤU HÌNH THỜI GIAN & NGƯỠNG LOGIC -->
+        <div class="card">
+          <h2 class="card-title">⏱️ Cấu Hình Thời Gian & Ngưỡng Logic</h2>
+          <p class="card-desc">
+            Điều chỉnh các ngưỡng thời gian và độ nhạy của cảm biến. Khi lưu, cấu hình sẽ ghi vĩnh viễn vào bộ nhớ Flash NVS của ESP32:
+          </p>
+
+          <form id="formLogicSettings" onsubmit="saveWebSettings(event)">
+            <!-- Slider 1: Thời gian ở tối đa -->
+            <div class="form-group-slider">
+              <div class="slider-label">
+                <span>⏱️ Thời gian ở tối đa:</span>
+                <strong id="lblStayTimeout" class="slider-val-badge">10 phút</strong>
+              </div>
+              <input type="range" id="inputStayTimeout" class="slider-input" min="5" max="30" step="1" value="10" 
+                     oninput="document.getElementById('lblStayTimeout').innerText = this.value + ' phút'">
+              <div class="slider-scale">
+                <span>5p</span>
+                <span>10 - 15p (Chuẩn trường)</span>
+                <span>30p</span>
+              </div>
+            </div>
+
+            <!-- Slider 2: Lọc âm thanh bạo lực -->
+            <div class="form-group-slider">
+              <div class="slider-label">
+                <span>🔊 Lọc âm bạo lực (Sound-Hold):</span>
+                <strong id="lblSoundHold" class="slider-val-badge">1.5 giây</strong>
+              </div>
+              <input type="range" id="inputSoundHold" class="slider-input" min="0.5" max="4.0" step="0.5" value="1.5" 
+                     oninput="document.getElementById('lblSoundHold').innerText = this.value + ' giây'">
+              <div class="slider-scale">
+                <span>0.5s</span>
+                <span>1.5s (Khuyên dùng)</span>
+                <span>4.0s</span>
+              </div>
+            </div>
+
+            <!-- Slider 3: Ngưỡng khói MQ-2 -->
+            <div class="form-group-slider">
+              <div class="slider-label">
+                <span>💨 Ngưỡng khói MQ-2 (ADC):</span>
+                <strong id="lblSmokeThresh" class="slider-val-badge">1800</strong>
+              </div>
+              <input type="range" id="inputSmokeThresh" class="slider-input" min="1000" max="3000" step="100" value="1800" 
+                     oninput="document.getElementById('lblSmokeThresh').innerText = this.value">
+              <div class="slider-scale">
+                <span>1000 ADC (Nhạy)</span>
+                <span>1800 ADC (Chuẩn)</span>
+                <span>3000 ADC</span>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-action btn-primary" style="width: 100%; margin-top: 6px;">
+              <span>💾</span>
+              <span>ÁP DỤNG CÀI ĐẶT XUỐNG ESP32</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- CỘT 2: QUẢN LÝ KẾT NỐI WIFI ESP32 -->
+        <div class="card">
+          <h2 class="card-title">📶 Quản Lý Kết Nối WiFi & Thiết Bị</h2>
+          <p class="card-desc">
+            Khi đổi mạng WiFi trường học hoặc phát 4G từ điện thoại, chỉ cần nhấn nút Đặt Lại WiFi dưới đây:
+          </p>
+
+          <!-- Hộp Reset WiFi nổi bật -->
+          <div class="reset-wifi-box">
+            <div class="wifi-status-line">
+              WiFi hiện tại của ESP32: <strong id="settingsWifiStatus">Chưa kết nối</strong>
+            </div>
+
+            <button type="button" class="btn-reset-wifi" onclick="triggerResetWiFi()">
+              <span>🔄</span>
+              <span>ĐẶT LẠI WIFI THIẾT BỊ (RESET WIFI)</span>
+            </button>
+
+            <button type="button" class="btn-action btn-subtle" onclick="triggerRebootESP()" style="width: 100%; margin-top: 10px;">
+              <span>🔁</span>
+              <span>Khởi Động Lại Thiết Bị (Reboot)</span>
+            </button>
+          </div>
+
+          <!-- Khung chỉ dẫn 3 bước cài đặt bằng điện thoại -->
+          <div class="guide-steps-box">
+            <div class="guide-steps-header">
+              <span>📱</span> <span>QUY TRÌNH 3 BƯỚC CÀI WIFI BẰNG ĐIỆN THOẠI:</span>
+            </div>
+            <ol class="guide-steps-list">
+              <li>Nhấn nút <strong>"Đặt Lại WiFi Thiết Bị (Reset WiFi)"</strong> ở trên.</li>
+              <li>ESP32 sẽ xóa WiFi cũ, tự phát mạng WiFi: <strong style="color: var(--primary);">KHKT-SmartRestroom-Setup</strong> (Pass: <code>12345678</code>).</li>
+              <li>Dùng điện thoại kết nối vào WiFi đó, màn hình cài đặt (<code>192.168.4.1</code>) sẽ tự động mở lên để chọn WiFi trường học mới.</li>
+            </ol>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    Hệ Thống Giám Sát An Toàn Nhà Vệ Sinh Học Đường • <strong>Trường THCS Nguyễn Công Trứ</strong>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
