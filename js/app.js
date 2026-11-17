@@ -415,7 +415,7 @@ async function saveWebSettings(e) {
   configuredSoundHoldSec = soundHold;
   configuredSmokeThreshold = smokeThresh;
 
-  const controlUrl = `${apiBaseUrl}/api/control`;
+  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
     await fetch(controlUrl, {
       method: 'POST',
@@ -450,7 +450,7 @@ async function triggerResetWiFi() {
 
   if (!confirm(confirmMsg)) return;
 
-  const controlUrl = `${apiBaseUrl}/api/control`;
+  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
     await fetch(controlUrl, {
       method: 'POST',
@@ -471,7 +471,7 @@ async function triggerResetWiFi() {
 async function triggerRebootESP() {
   if (!confirm("Khởi động lại vi điều khiển ESP32 từ xa?")) return;
 
-  const controlUrl = `${apiBaseUrl}/api/control`;
+  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
     await fetch(controlUrl, {
       method: 'POST',
@@ -491,7 +491,7 @@ async function triggerRebootESP() {
 
 // --- 9. PHÁT THANH KHẨN CẤP (SIREN / SMOKE / RESET) ---
 async function sendQuickCommand(cmd) {
-  const controlUrl = `${apiBaseUrl}/api/control`;
+  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
     await fetch(controlUrl, {
       method: 'POST',

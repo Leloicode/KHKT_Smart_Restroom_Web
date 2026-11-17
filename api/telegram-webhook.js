@@ -3,6 +3,8 @@
  * Tiếp nhận Webhook từ Telegram Bot (Inline Buttons và phản hồi tương tác)
  */
 
+import { getSharedState, saveSharedState } from './status.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(200).send("Telegram Webhook Serverless Endpoint Ready.");
@@ -25,19 +27,31 @@ export default async function handler(req, res) {
 
       let answerText = "Đã tiếp nhận yêu cầu!";
       let statusNote = "";
+      let queuedCmd = null;
 
       if (data === "CMD_SIREN") {
         answerText = "Đang kích hoạt còi hụ răn đe tại nhà vệ sinh!";
         statusNote = `\n\n⚡ *CẬP NHẬT:* ${fromUser} đã kích hoạt *CÒI HỤ RĂN ĐE* lúc ${new Date().toLocaleTimeString('vi-VN')}.`;
+        queuedCmd = "SIREN";
       } else if (data === "CMD_SMOKE") {
         answerText = "Đang phát chuỗi âm thanh cảnh báo cấm hút thuốc!";
         statusNote = `\n\n⚡ *CẬP NHẬT:* ${fromUser} đã phát cảnh báo *CẤM HÚT THUỐC* lúc ${new Date().toLocaleTimeString('vi-VN')}.`;
+        queuedCmd = "SMOKE";
       } else if (data === "CMD_SECURITY") {
         answerText = "Đã ghi nhận! Hệ thống phát chuông thông báo bảo vệ đang di chuyển tới.";
         statusNote = `\n\n👮 *XỬ LÝ:* ${fromUser} xác nhận *ĐANG CỬ BẢO VỆ TỚI HIỆN TRƯỜNG* lúc ${new Date().toLocaleTimeString('vi-VN')}.`;
+        queuedCmd = "CHIME";
       } else if (data === "CMD_RESET") {
         answerText = "Đã hủy trạng thái báo động!";
         statusNote = `\n\n✅ *HOÀN TẤT:* ${fromUser} đã xác minh và *HỦY BÁO ĐỘNG* lúc ${new Date().toLocaleTimeString('vi-VN')}.`;
+        queuedCmd = "RESET";
+      }
+
+      // Đưa lệnh vào hàng đợi để ESP32 kéo về thực thi ngay trong chu kỳ tiếp theo
+      if (queuedCmd) {
+        const state = getSharedState();
+        state.pendingCommand = queuedCmd;
+        saveSharedState(state);
       }
 
       // Trả lời Telegram Callback Query (để tắt vòng tròn xoay trên nút)
