@@ -73,16 +73,29 @@ function switchTab(tabName) {
 // --- 4. KẾT NỐI MÁY CHỦ ĐÁM MÂY VERCEL CLOUD SERVERLESS 24/7 ---
 const apiBaseUrl = ''; // Mặc định chạy trực tiếp trên máy chủ Đám mây Vercel Cloud Serverless 24/7
 let isUserEditingSettings = false;
+let isSavingLogicSettings = false;
+let sliderEditTimer = null;
+let pendingLogicSettings = null;
 
 // Lắng nghe người dùng kéo slider để không bị dữ liệu tải về đè lên lúc đang kéo
 function setupSliderListeners() {
-  ['inputStayTimeout', 'inputSoundHold', 'inputSmokeThresh'].forEach(id => {
+  ['inputStayTimeout', 'inputSoundHold', 'inputSmokeThresh'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    ['mousedown', 'touchstart'].forEach(ev => el.addEventListener(ev, () => { isUserEditingSettings = true; }));
-    ['mouseup', 'touchend', 'change'].forEach(ev => el.addEventListener(ev, () => {
-      setTimeout(() => { isUserEditingSettings = false; }, 2500);
-    }));
+    ['pointerdown', 'mousedown', 'touchstart', 'input'].forEach((ev) => {
+      el.addEventListener(ev, () => {
+        clearTimeout(sliderEditTimer);
+        isUserEditingSettings = true;
+      });
+    });
+    ['pointerup', 'mouseup', 'touchend', 'change'].forEach((ev) => {
+      el.addEventListener(ev, () => {
+        clearTimeout(sliderEditTimer);
+        sliderEditTimer = setTimeout(() => {
+          isUserEditingSettings = false;
+        }, 2500);
+      });
+    });
   });
 }
 
@@ -99,27 +112,60 @@ let mediaStream = null;
 let analyser = null;
 let visualizerAnimationId = null;
 
-let isSimulationActive = false;
 let previousOnlineStatus = null;
+let latestStatusSeq = 0;
+let isPttActive = false;
+let pttSessionId = 0;
+let lastTouchTimestamp = 0;
+
+function updateDynamicThresholdLabels() {
+  const lblStayRule = document.getElementById('lblStayMetricRule');
+  if (lblStayRule) lblStayRule.innerText = `>${configuredStayTimeoutMin}P`;
+
+  const lblHwOvertime = document.getElementById('lblHwOvertimeMin');
+  if (lblHwOvertime) lblHwOvertime.innerText = String(configuredStayTimeoutMin);
+
+  const valStayLimit = document.getElementById('valStayLimit');
+  if (valStayLimit) valStayLimit.innerText = `/ ${configuredStayTimeoutMin}p`;
+}
+
+function updateHardwareControlsState(isOnline) {
+  const buttons = document.querySelectorAll('#hardwareTestCard button[data-hw-btn]');
+  buttons.forEach((btn) => {
+    btn.disabled = !isOnline;
+  });
+
+  const badge = document.getElementById('hardwareTestBadge');
+  if (badge) {
+    if (isOnline) {
+      badge.className = 'badge badge-success';
+      badge.innerText = 'ESP32 Trực Tuyến • Sẵn Sàng';
+    } else {
+      badge.className = 'badge badge-warning';
+      badge.innerText = 'Chờ ESP32 trực tuyến';
+    }
+  }
+}
 
 // --- 6. GỌI API STATUS TỪ ESP32 HOẶC CLOUD ---
 async function fetchDeviceStatus() {
+  const seq = ++latestStatusSeq;
   const statusUrl = `${apiBaseUrl}/api/status?_t=${Date.now()}`;
   try {
     const res = await fetch(statusUrl, { method: 'GET', cache: 'no-store' });
     if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
+    if (seq !== latestStatusSeq) return;
 
-    if (data.isOnline) {
-      // Khi ESP32 trực tuyến: ƯU TIÊN 100% DỮ LIỆU THẬT TỪ PHẦN CỨNG
-      // Tự động hủy mọi chế độ mô phỏng
-      isSimulationActive = false;
+    if (data && data.isOnline) {
+      // Khi ESP32 trực tuyến: nhận diện ngay lập tức và dùng 100% dữ liệu thật từ phần cứng
       isEsp32Online = true;
 
       if (previousOnlineStatus === false || previousOnlineStatus === null) {
         addLogEntry("Phần cứng ESP32 đã kết nối", data.currentWifi || "WiFi Sa Bàn", "badge-success", "🟢 Thiết bị trực tuyến - Nhận dữ liệu thực 100%");
       }
       previousOnlineStatus = true;
+      updateHardwareControlsState(true);
       renderRealData(data);
     } else {
       isEsp32Online = false;
@@ -127,24 +173,23 @@ async function fetchDeviceStatus() {
         addLogEntry("Mất kết nối ESP32", "Ngoại tuyến", "badge-warning", "⚠️ Mất tín hiệu heartbeat từ vi điều khiển");
       }
       previousOnlineStatus = false;
-
-      // Nếu không có bấm thử nghiệm tạm thời, hiển thị trạng thái chờ sạch sẽ
-      if (!isSimulationActive) {
-        renderStaticIdleState();
-      }
-    }
-  } catch (err) {
-    isEsp32Online = false;
-    previousOnlineStatus = false;
-    if (!isSimulationActive) {
       renderStaticIdleState();
     }
+  } catch (err) {
+    if (seq !== latestStatusSeq) return;
+    isEsp32Online = false;
+    if (previousOnlineStatus === true) {
+      addLogEntry("Mất kết nối ESP32", "Ngoại tuyến", "badge-warning", "⚠️ Không thể kết nối máy chủ trạng thái");
+    }
+    previousOnlineStatus = false;
+    renderStaticIdleState();
   }
 }
 
 // Hiển thị trạng thái tĩnh khi chưa kết nối phần cứng ESP32 (Không tự nhảy số ảo)
 function renderStaticIdleState() {
   updateLiveBadge(false);
+  currentAlertLevel = 0;
 
   document.getElementById('valConnectionStatus').className = "badge badge-warning";
   document.getElementById('valConnectionStatus').innerText = "Chờ kết nối ESP32";
@@ -169,21 +214,27 @@ function renderStaticIdleState() {
   document.getElementById('valStayStatus').innerText = "Chưa có người";
   document.getElementById('valStayStatus').style.color = "var(--text-muted)";
   document.getElementById('barStayTime').style.width = "0%";
+  document.getElementById('barStayTime').style.backgroundColor = "var(--success)";
 
   document.getElementById('valOccupancy').innerHTML = `0 <small>học sinh</small>`;
-  document.getElementById('valPresence').innerText = "PIR: Phòng trống";
+  document.getElementById('valPresence').innerText = "PIR: Khu vực WC trống";
+  document.getElementById('valPresence').style.color = "var(--text-muted)";
   document.getElementById('barOccupancy').style.width = "0%";
+  document.getElementById('barOccupancy').style.backgroundColor = "var(--primary)";
 
   const emergencyBanner = document.getElementById('emergencyBanner');
   if (emergencyBanner) emergencyBanner.classList.remove('show');
 
+  updateHardwareControlsState(false);
+  updateDynamicThresholdLabels();
   renderSecurityStatus(0, false, null);
 }
 
 // Cập nhật dữ liệu thật nhận từ ESP32
 function renderRealData(data) {
-  const isOnline = !!data.isOnline;
+  const isOnline = Boolean(data.isOnline);
   updateLiveBadge(isOnline);
+  updateHardwareControlsState(isOnline);
 
   if (isOnline) {
     document.getElementById('valConnectionStatus').className = "badge badge-success";
@@ -193,32 +244,62 @@ function renderRealData(data) {
     document.getElementById('valConnectionStatus').innerText = "Chờ kết nối ESP32";
   }
 
-  currentAlertLevel = data.alertLevel || 0;
-  configuredStayTimeoutMin = data.stayTimeoutSetting || configuredStayTimeoutMin;
-  currentConnectedWifi = data.currentWifi || (isOnline ? "WiFi Sa Bàn" : "Chưa kết nối");
+  currentAlertLevel = Number(data.alertLevel ?? 0);
 
+  if (pendingLogicSettings) {
+    const hasAllSettings =
+      data.stayTimeoutSetting !== undefined && data.stayTimeoutSetting !== null &&
+      data.soundHoldSetting !== undefined && data.soundHoldSetting !== null &&
+      data.smokeThresholdSetting !== undefined && data.smokeThresholdSetting !== null;
+
+    const stayMatches = hasAllSettings && Number(data.stayTimeoutSetting) === pendingLogicSettings.stayTimeout;
+    const soundMatches = hasAllSettings && Math.abs(Number(data.soundHoldSetting) - pendingLogicSettings.soundHold) < 0.05;
+    const smokeMatches = hasAllSettings && Number(data.smokeThresholdSetting) === pendingLogicSettings.smokeThresh;
+
+    if (stayMatches && soundMatches && smokeMatches) {
+      pendingLogicSettings = null;
+      addLogEntry("✅ ESP32 đã xác nhận cấu hình", `Ở tối đa: ${data.stayTimeoutSetting}p | Lọc âm: ${data.soundHoldSetting}s | Khói: ${data.smokeThresholdSetting}`, "badge-success", "Đồng bộ NVS thành công");
+    } else if (Date.now() > pendingLogicSettings.expiresAt) {
+      pendingLogicSettings = null;
+      addLogEntry("⚠️ Hết thời gian chờ đồng bộ cấu hình", "Đọc lại giá trị hiện hành từ ESP32", "badge-warning", "Vui lòng kiểm tra kết nối phần cứng");
+    }
+  }
+
+  configuredStayTimeoutMin = pendingLogicSettings
+    ? pendingLogicSettings.stayTimeout
+    : Number(data.stayTimeoutSetting ?? configuredStayTimeoutMin ?? 10);
+  configuredSoundHoldSec = pendingLogicSettings
+    ? pendingLogicSettings.soundHold
+    : Number(data.soundHoldSetting ?? configuredSoundHoldSec ?? 1.5);
+  configuredSmokeThreshold = pendingLogicSettings
+    ? pendingLogicSettings.smokeThresh
+    : Number(data.smokeThresholdSetting ?? configuredSmokeThreshold ?? 1800);
+
+  updateDynamicThresholdLabels();
+
+  currentConnectedWifi = data.currentWifi || (isOnline ? "WiFi Sa Bàn" : "Chưa kết nối");
   document.getElementById('valCurrentWifi').innerText = currentConnectedWifi;
   document.getElementById('valCurrentWifi').style.color = isOnline ? "var(--primary)" : "var(--text-muted)";
   document.getElementById('settingsWifiStatus').innerText = currentConnectedWifi;
 
   // Tự động đồng bộ các thanh trượt trong Tab Cài Đặt theo giá trị thực lưu trong Flash ESP32
-  if (!isUserEditingSettings) {
-    if (data.stayTimeoutSetting) {
+  if (!isUserEditingSettings && !isSavingLogicSettings && !pendingLogicSettings) {
+    if (data.stayTimeoutSetting !== undefined && data.stayTimeoutSetting !== null) {
       document.getElementById('inputStayTimeout').value = data.stayTimeoutSetting;
       document.getElementById('lblStayTimeout').innerText = data.stayTimeoutSetting + ' phút';
     }
-    if (data.soundHoldSetting) {
+    if (data.soundHoldSetting !== undefined && data.soundHoldSetting !== null) {
       document.getElementById('inputSoundHold').value = data.soundHoldSetting;
       document.getElementById('lblSoundHold').innerText = data.soundHoldSetting + ' giây';
     }
-    if (data.smokeThresholdSetting) {
+    if (data.smokeThresholdSetting !== undefined && data.smokeThresholdSetting !== null) {
       document.getElementById('inputSmokeThresh').value = data.smokeThresholdSetting;
       document.getElementById('lblSmokeThresh').innerText = data.smokeThresholdSetting;
     }
   }
 
   // 1. Cảm biến âm thanh KY-038
-  const soundDb = data.soundNoise || 40;
+  const soundDb = Number(data.soundNoise ?? 0);
   document.getElementById('valSoundNoise').innerHTML = `${soundDb} <small>dB</small>`;
   const barSound = document.getElementById('barSound');
   const valSoundStatus = document.getElementById('valSoundStatus');
@@ -235,13 +316,13 @@ function renderRealData(data) {
   }
 
   // 2. Cảm biến khói MQ-2
-  const smoke = data.smokeRaw || 450;
+  const smoke = Number(data.smokeRaw ?? 0);
   document.getElementById('valSmokeRaw').innerHTML = `${smoke} <small>ADC</small>`;
   const barSmoke = document.getElementById('barSmoke');
   const valSmokeStatus = document.getElementById('valSmokeStatus');
   barSmoke.style.width = Math.min(100, (smoke / 4095) * 100 * 2) + '%';
 
-  if (smoke > (data.smokeThresholdSetting || 1800) || currentAlertLevel === 1) {
+  if (smoke > configuredSmokeThreshold || currentAlertLevel === 1) {
     barSmoke.style.backgroundColor = 'var(--danger)';
     valSmokeStatus.innerText = '⚠️ Phát hiện khói thuốc / vape!';
     valSmokeStatus.style.color = 'var(--danger)';
@@ -252,13 +333,13 @@ function renderRealData(data) {
   }
 
   // 3. Thời gian ở trong WC
-  const stayMins = data.stayMinutes || 0;
+  const stayMins = Number(data.stayMinutes ?? 0);
   const timeFormatted = `${String(stayMins).padStart(2, '0')}:00`;
   document.getElementById('valStayTime').innerHTML = `${timeFormatted} <small id="valStayLimit">/ ${configuredStayTimeoutMin}p</small>`;
   const barStay = document.getElementById('barStayTime');
   const valStayStatus = document.getElementById('valStayStatus');
 
-  const percentStay = Math.min(100, (stayMins / configuredStayTimeoutMin) * 100);
+  const percentStay = Math.min(100, (stayMins / Math.max(1, configuredStayTimeoutMin)) * 100);
   barStay.style.width = percentStay + '%';
 
   if (stayMins >= configuredStayTimeoutMin || currentAlertLevel === 4) {
@@ -272,13 +353,26 @@ function renderRealData(data) {
   }
 
   // 4. Hiện diện & số học sinh
-  const occ = data.occupancy || 0;
+  const occ = Number(data.occupancy ?? 0);
+  const presence = Boolean(data.presence ?? false);
+  const barOccupancy = document.getElementById('barOccupancy');
+  const valPresence = document.getElementById('valPresence');
   document.getElementById('valOccupancy').innerHTML = `${occ} <small>học sinh</small>`;
-  document.getElementById('valPresence').innerText = data.presence ? 'PIR: Có người trong WC' : 'PIR: Phòng trống';
-  document.getElementById('barOccupancy').style.width = Math.min(100, occ * 33) + '%';
+
+  if (currentAlertLevel === 3) {
+    barOccupancy.style.backgroundColor = 'var(--warning)';
+    barOccupancy.style.width = '100%';
+    valPresence.innerText = `⚠️ Tụ tập đông người (${occ} học sinh)`;
+    valPresence.style.color = 'var(--warning-dark)';
+  } else {
+    barOccupancy.style.backgroundColor = 'var(--primary)';
+    barOccupancy.style.width = Math.min(100, occ * 25) + '%';
+    valPresence.innerText = presence ? 'PIR: Có người trong WC' : 'PIR: Khu vực WC trống';
+    valPresence.style.color = 'var(--text-muted)';
+  }
 
   renderEmergencyBanner(currentAlertLevel);
-  renderSecurityStatus(currentAlertLevel, true, data);
+  renderSecurityStatus(currentAlertLevel, isOnline, data);
 }
 
 function updateLiveBadge(isLive, customText) {
@@ -299,18 +393,26 @@ function updateLiveBadge(isLive, customText) {
 
 function renderEmergencyBanner(level) {
   const banner = document.getElementById('emergencyBanner');
+  const bannerIcon = document.getElementById('emergencyBannerIcon');
   const bannerText = document.getElementById('emergencyBannerText');
   if (!banner) return;
 
   if (level === 2) {
     banner.classList.add('show');
-    bannerText.innerText = '🚨 BÁO ĐỘNG BẠO LỰC / XÔ XÁT: Phát hiện la hét trong WC!';
+    if (bannerIcon) bannerIcon.innerText = '🚨';
+    if (bannerText) bannerText.innerText = '🚨 BÁO ĐỘNG BẠO LỰC / XÔ XÁT: Phát hiện la hét trong WC!';
   } else if (level === 1) {
     banner.classList.add('show');
-    bannerText.innerText = '🚬 CẢNH BÁO HÚT THUỐC: Phát hiện khói thuốc / vape!';
+    if (bannerIcon) bannerIcon.innerText = '🚬';
+    if (bannerText) bannerText.innerText = '🚬 CẢNH BÁO HÚT THUỐC: Phát hiện khói thuốc / vape!';
+  } else if (level === 3) {
+    banner.classList.add('show');
+    if (bannerIcon) bannerIcon.innerText = '👥';
+    if (bannerText) bannerText.innerText = '👥 CẢNH BÁO TỤ TẬP ĐÔNG NGƯỜI: Phát hiện số lượng học sinh vượt ngưỡng trong WC!';
   } else if (level === 4) {
     banner.classList.add('show');
-    bannerText.innerText = `⚠️ CẢNH BÁO: Học sinh ở trong WC quá ${configuredStayTimeoutMin} phút!`;
+    if (bannerIcon) bannerIcon.innerText = '⏱️';
+    if (bannerText) bannerText.innerText = `⚠️ CẢNH BÁO: Học sinh ở trong WC quá ${configuredStayTimeoutMin} phút!`;
   } else {
     banner.classList.remove('show');
   }
@@ -324,7 +426,7 @@ function renderSecurityStatus(level, isOnline, data) {
   const tag = document.getElementById('securityStatusTag');
   if (!card) return;
 
-  if (!isOnline && !isSimulationActive) {
+  if (!isOnline) {
     card.className = "security-status-card status-safe";
     if (icon) icon.innerText = "⏳";
     if (title) title.innerText = "ĐANG CHỜ TÍN HIỆU TỪ SA BÀN ESP32...";
@@ -341,7 +443,7 @@ function renderSecurityStatus(level, isOnline, data) {
     card.className = "security-status-card status-danger";
     if (icon) icon.innerText = "🚨";
     if (title) title.innerText = "🚨 BÁO ĐỘNG ĐỎ: PHÁT HIỆN DẤU HIỆU CÃI VÃ / BẠO LỰC!";
-    if (desc) desc.innerText = "Cảm biến âm thanh KY-038 ghi nhận tiếng la hét dồn dập >85dB kéo dài >1.5s. Còi răn đe tại chỗ đang hú!";
+    if (desc) desc.innerText = `Cảm biến âm thanh KY-038 ghi nhận tiếng la hét dồn dập >85dB kéo dài >${configuredSoundHoldSec}s. Còi răn đe tại chỗ đang hú!`;
     if (tag) {
       tag.className = "badge-status-danger";
       tag.innerText = "NGUY CƠ BẠO LỰC";
@@ -355,6 +457,17 @@ function renderSecurityStatus(level, isOnline, data) {
     if (tag) {
       tag.className = "badge-status-warning";
       tag.innerText = "KHÓI THUỐC LÁ";
+    }
+  } else if (level === 3) {
+    // Tụ tập đông người bất thường
+    const occCount = Number(data?.occupancy ?? 0);
+    card.className = "security-status-card status-warning";
+    if (icon) icon.innerText = "👥";
+    if (title) title.innerText = "⚠️ CẢNH BÁO: TỤ TẬP ĐÔNG NGƯỜI BẤT THƯỜNG TRONG WC!";
+    if (desc) desc.innerText = `Cảm biến cửa IR ghi nhận ${occCount} học sinh đang tập trung trong khu vực WC. Đề nghị giám thị kiểm tra để ngăn ngừa nguy cơ xô xát.`;
+    if (tag) {
+      tag.className = "badge-status-warning";
+      tag.innerText = "TỤ TẬP ĐÔNG NGƯỜI";
     }
   } else if (level === 4) {
     // Ở quá giờ quy định
@@ -379,97 +492,68 @@ function renderSecurityStatus(level, isOnline, data) {
   }
 }
 
+// Hàm dùng chung gửi lệnh POST xuống /api/status và kiểm tra res.ok + success
+async function postStatusCommand(command, payload = null, extraFields = {}) {
+  const controlUrl = `${apiBaseUrl}/api/status`;
+  const bodyObj = {
+    command,
+    deviceId: 'RESTROOM_WC1_KHKT',
+    ...(payload !== null ? { payload } : {}),
+    ...extraFields
+  };
+
+  const res = await fetch(controlUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bodyObj)
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_err) {
+    data = null;
+  }
+
+  if (!res.ok || (data && data.success === false)) {
+    throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
 // Hàm gửi lệnh điều khiển xuống mạch phần cứng ESP32 qua Cloud
 async function sendHardwareCommand(cmd) {
-  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
-    await fetch(controlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command: cmd,
-        deviceId: 'RESTROOM_WC1_KHKT'
-      })
-    });
-  } catch (e) {
-    console.log("Offline hardware command:", cmd);
+    await postStatusCommand(cmd);
+    return true;
+  } catch (err) {
+    addLogEntry("❌ Lỗi gửi lệnh phần cứng", cmd, "badge-danger", err.message);
+    return false;
   }
 }
 
-// BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST TRỰC TIẾP TRÊN WEB VÀ SA BÀN)
-window.simulateIncident = function(type) {
-  if (isEsp32Online) {
-    // 1. KHI PHẦN CỨNG ESP32 ĐANG BẬT & TRỰC TUYẾN:
-    // GỬI LỆNH THẬT XUỐNG ESP32 ĐỂ SA BÀN PHẢN HỒI THẬT 100% (KHÔNG TỰ TẠO DỮ LIỆU ẢO)
-    if (type === 'violence') {
-      sendHardwareCommand('SIREN');
-      addLogEntry("🚨 Lệnh kiểm tra: Báo động bạo lực", "Gửi xuống ESP32", "badge-danger", "Đã kích hoạt còi răn đe & đèn chớp sa bàn");
-    } else if (type === 'smoke') {
-      sendHardwareCommand('SMOKE');
-      addLogEntry("🚬 Lệnh kiểm tra: Cảnh báo khói", "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt cảnh báo khói thuốc sa bàn");
-    } else if (type === 'overtime') {
-      sendHardwareCommand('OVERTIME');
-      addLogEntry("⏱️ Lệnh kiểm tra: Ở quá 10 phút", "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt chuông nhắc nhở quá giờ sa bàn");
-    } else if (type === 'reset') {
-      sendHardwareCommand('RESET');
-      addLogEntry("🟢 Khôi phục an toàn", "Gửi xuống ESP32", "badge-success", "Đã đặt lại trạng thái bình thường cho phần cứng");
-    }
-    setTimeout(fetchDeviceStatus, 500);
-    return;
+// BỘ KIỂM TRA TÍN HIỆU PHẦN CỨNG SA BÀN THỰC TẾ (KHÔNG GIẢ LẬP)
+window.triggerHardwareTest = async function(cmd) {
+  if (!isEsp32Online) {
+    addLogEntry("⚠️ ESP32 đang ngoại tuyến", "Từ chối gửi lệnh", "badge-warning", "Vui lòng bật nguồn sa bàn trước khi kiểm tra");
+    return false;
   }
 
-  // 2. KHI ESP32 CHƯA BẬT NGUỒN: MÔ PHỎNG GIAO DIỆN TẠM THỜI (PREVIEW CHO GIÁM KHẢO XEM GIAO DIỆN)
-  if (type === 'violence') {
-    isSimulationActive = true;
-    const mockData = {
-      isOnline: false,
-      alertLevel: 2,
-      soundNoise: 88,
-      smokeRaw: 450,
-      presence: true,
-      stayMinutes: 2,
-      occupancy: 2,
-      currentWifi: "Chờ kết nối ESP32"
-    };
-    renderRealData(mockData);
-    addLogEntry("Thử nghiệm dấu hiệu âm thanh la hét", "Mức 2 - Khẩn cấp", "badge-danger", "🚨 Xem trước giao diện báo động bạo lực");
-    sendHardwareCommand('SIREN');
-  } else if (type === 'smoke') {
-    isSimulationActive = true;
-    const mockData = {
-      isOnline: false,
-      alertLevel: 1,
-      soundNoise: 42,
-      smokeRaw: 2450,
-      presence: true,
-      stayMinutes: 3,
-      occupancy: 1,
-      currentWifi: "Chờ kết nối ESP32"
-    };
-    renderRealData(mockData);
-    addLogEntry("Thử nghiệm cảm biến khói vượt ngưỡng", "Mức 1 - Cảnh báo", "badge-warning", "🚬 Xem trước giao diện cảnh báo khói thuốc");
-    sendHardwareCommand('SMOKE');
-  } else if (type === 'overtime') {
-    isSimulationActive = true;
-    const mockData = {
-      isOnline: false,
-      alertLevel: 4,
-      soundNoise: 40,
-      smokeRaw: 420,
-      presence: true,
-      stayMinutes: 12,
-      occupancy: 1,
-      currentWifi: "Chờ kết nối ESP32"
-    };
-    renderRealData(mockData);
-    addLogEntry("Thử nghiệm thời gian ở quá 10 phút", "Mức 4 - Quá giờ", "badge-warning", "⏱️ Xem trước giao diện cảnh báo ở quá giờ");
-    sendHardwareCommand('OVERTIME');
-  } else if (type === 'reset') {
-    isSimulationActive = false;
-    renderStaticIdleState();
-    addLogEntry("Khôi phục trạng thái chờ", "Bình thường", "badge-success", "🟢 Hệ thống sẵn sàng kết nối");
-    sendHardwareCommand('RESET');
+  const ok = await sendHardwareCommand(cmd);
+  if (!ok) return false;
+
+  if (cmd === 'SIREN') {
+    addLogEntry("🚨 Lệnh kiểm tra: Báo động bạo lực", "Gửi xuống ESP32", "badge-danger", "Đã kích hoạt còi răn đe & đèn chớp sa bàn");
+  } else if (cmd === 'SMOKE') {
+    addLogEntry("🚬 Lệnh kiểm tra: Cảnh báo khói", "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt cảnh báo khói thuốc sa bàn");
+  } else if (cmd === 'OVERTIME') {
+    addLogEntry(`⏱️ Lệnh kiểm tra: Ở quá ${configuredStayTimeoutMin} phút`, "Gửi xuống ESP32", "badge-warning", "Đã kích hoạt chuông nhắc nhở quá giờ sa bàn");
+  } else if (cmd === 'RESET') {
+    addLogEntry("🟢 Khôi phục an toàn", "Gửi xuống ESP32", "badge-success", "Đã đặt lại trạng thái bình thường cho phần cứng");
   }
+
+  setTimeout(fetchDeviceStatus, 500);
+  return true;
 };
 
 setInterval(fetchDeviceStatus, 2000);
@@ -478,41 +562,61 @@ fetchDeviceStatus();
 // --- 7. CÀI ĐẶT THỜI GIAN & NGƯỠNG LOGIC ---
 async function saveWebSettings(e) {
   e.preventDefault();
-  const stayTimeout = parseInt(document.getElementById('inputStayTimeout').value);
-  const soundHold = parseFloat(document.getElementById('inputSoundHold').value);
-  const smokeThresh = parseInt(document.getElementById('inputSmokeThresh').value);
+  const inputStay = document.getElementById('inputStayTimeout');
+  const inputSound = document.getElementById('inputSoundHold');
+  const inputSmoke = document.getElementById('inputSmokeThresh');
+  const stayTimeout = parseInt(inputStay.value, 10);
+  const soundHold = parseFloat(inputSound.value);
+  const smokeThresh = parseInt(inputSmoke.value, 10);
 
-  configuredStayTimeoutMin = stayTimeout;
-  configuredSoundHoldSec = soundHold;
-  configuredSmokeThreshold = smokeThresh;
-
-  const controlUrl = `${apiBaseUrl}/api/status`;
+  isSavingLogicSettings = true;
   try {
-    await fetch(controlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command: 'SET_LOGIC',
-        deviceId: 'RESTROOM_WC1_KHKT',
-        payload: {
-          stayTimeout: stayTimeout,
-          soundHold: soundHold,
-          smokeThresh: smokeThresh
-        }
-      })
+    await postStatusCommand('SET_LOGIC', {
+      stayTimeout,
+      soundHold,
+      smokeThresh
     });
+
+    configuredStayTimeoutMin = stayTimeout;
+    configuredSoundHoldSec = soundHold;
+    configuredSmokeThreshold = smokeThresh;
+
+    if (inputStay) inputStay.value = String(stayTimeout);
+    if (inputSound) inputSound.value = String(soundHold);
+    if (inputSmoke) inputSmoke.value = String(smokeThresh);
+    const lblStay = document.getElementById('lblStayTimeout');
+    if (lblStay) lblStay.innerText = stayTimeout + ' phút';
+    const lblSound = document.getElementById('lblSoundHold');
+    if (lblSound) lblSound.innerText = soundHold + ' giây';
+    const lblSmoke = document.getElementById('lblSmokeThresh');
+    if (lblSmoke) lblSmoke.innerText = String(smokeThresh);
+
+    updateDynamicThresholdLabels();
+
+    addLogEntry("⚙️ Cập nhật cấu hình", `Ở tối đa: ${stayTimeout}p | Lọc âm: ${soundHold}s | Khói: ${smokeThresh}`, "badge-info", "Đã gửi xuống ESP32");
+    alert(`✅ ĐÃ LƯU CẤU HÌNH THÀNH CÔNG!\n\n• Thời gian ở tối đa: ${stayTimeout} phút\n• Thời gian lọc tiếng la hét: ${soundHold} giây\n• Ngưỡng khói thuốc: ${smokeThresh} ADC\n\nCấu hình đã được đồng bộ xuống thiết bị ESP32!`);
+
+    // Bắt đầu cửa sổ chờ 20s SAU khi đóng alert() để thanh trượt không bị giá trị cũ ghi đè trước khi ESP32 phản hồi
+    pendingLogicSettings = {
+      stayTimeout,
+      soundHold,
+      smokeThresh,
+      expiresAt: Date.now() + 20000
+    };
   } catch (err) {
-    console.log("Offline mode - Applied settings locally.");
+    addLogEntry("❌ Lỗi lưu cấu hình", `Ở tối đa: ${stayTimeout}p | Lọc âm: ${soundHold}s | Khói: ${smokeThresh}`, "badge-danger", err.message);
+    alert("❌ Lưu cấu hình thất bại: " + err.message);
+    return;
+  } finally {
+    isSavingLogicSettings = false;
   }
 
-  addLogEntry("⚙️ Cập nhật cấu hình", `Ở tối đa: ${stayTimeout}p | Lọc âm: ${soundHold}s | Khói: ${smokeThresh}`, "badge-info", "Đã gửi xuống ESP32");
-  alert(`✅ ĐÃ LƯU CẤU HÌNH THÀNH CÔNG!\n\n• Thời gian ở tối đa: ${stayTimeout} phút\n• Thời gian lọc tiếng la hét: ${soundHold} giây\n• Ngưỡng khói thuốc: ${smokeThresh} ADC\n\nCấu hình đã được đồng bộ xuống thiết bị ESP32!`);
   fetchDeviceStatus();
 }
 
 // --- 8. ĐẶT LẠI WIFI THIẾT BỊ (RESET WIFI ESP32) ---
 async function triggerResetWiFi() {
-  const confirmMsg = 
+  const confirmMsg =
     "⚠️ BẠN CÓ CHẮC MUỐN ĐẶT LẠI WIFI CỦA THIẾT BỊ ESP32?\n\n" +
     "1. ESP32 sẽ xóa mật khẩu WiFi cũ đã lưu trong bộ nhớ Flash.\n" +
     "2. ESP32 tự khởi động lại và phát ra điểm phát WiFi: 'KHKT-SmartRestroom-Setup'.\n" +
@@ -521,18 +625,12 @@ async function triggerResetWiFi() {
 
   if (!confirm(confirmMsg)) return;
 
-  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
-    await fetch(controlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command: 'RESET_WIFI',
-        deviceId: 'RESTROOM_WC1_KHKT'
-      })
-    });
+    await postStatusCommand('RESET_WIFI');
   } catch (err) {
-    console.log("Offline reset wifi trigger");
+    addLogEntry("❌ Lỗi đặt lại WiFi", "RESET_WIFI", "badge-danger", err.message);
+    alert("❌ Gửi lệnh đặt lại WiFi thất bại: " + err.message);
+    return;
   }
 
   addLogEntry("🔄 Đặt lại WiFi", "Gửi lệnh RESET_WIFI", "badge-warning", "ESP32 đang mở AP 192.168.4.1");
@@ -542,18 +640,12 @@ async function triggerResetWiFi() {
 async function triggerRebootESP() {
   if (!confirm("Khởi động lại vi điều khiển ESP32 từ xa?")) return;
 
-  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
-    await fetch(controlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command: 'REBOOT',
-        deviceId: 'RESTROOM_WC1_KHKT'
-      })
-    });
+    await postStatusCommand('REBOOT');
   } catch (err) {
-    console.log("Offline reboot");
+    addLogEntry("❌ Lỗi khởi động lại", "REBOOT", "badge-danger", err.message);
+    alert("❌ Gửi lệnh khởi động lại thất bại: " + err.message);
+    return;
   }
 
   addLogEntry("🔁 Khởi động lại", "Gửi lệnh REBOOT", "badge-warning", "Đang khởi động lại CPU");
@@ -562,35 +654,34 @@ async function triggerRebootESP() {
 
 // --- 9. PHÁT THANH KHẨN CẤP (SIREN / SMOKE / RESET) ---
 async function sendQuickCommand(cmd) {
-  const controlUrl = `${apiBaseUrl}/api/status`;
   try {
-    await fetch(controlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command: cmd,
-        deviceId: 'RESTROOM_WC1_KHKT'
-      })
-    });
-  } catch (e) {
-    console.log("Offline command:", cmd);
+    await postStatusCommand(cmd);
+  } catch (err) {
+    addLogEntry("❌ Lỗi gửi lệnh " + cmd, "Thao tác thất bại", "badge-danger", err.message);
+    alert("❌ Không thể gửi lệnh " + cmd + ": " + err.message);
+    return;
   }
 
   if (cmd === 'SIREN') {
-    currentAlertLevel = 2;
     addLogEntry("🚨 Hú còi răn đe bạo lực", "Lệnh từ Quản trị viên Web", "badge-danger", "Đã phát tới loa hộp 3020 4R 3W");
   } else if (cmd === 'SMOKE') {
-    currentAlertLevel = 1;
     addLogEntry("🚬 Cảnh báo cấm hút thuốc", "Lệnh từ Quản trị viên Web", "badge-warning", "Đã phát tới loa hộp 3020 4R 3W");
   } else if (cmd === 'OVERTIME') {
-    currentAlertLevel = 4;
-    addLogEntry("⏱️ Cảnh báo ở quá 10 phút", "Lệnh từ Quản trị viên Web", "badge-warning", "Đã phát chuông nhắc nhở tới loa hộp 3020 4R 3W");
+    addLogEntry(`⏱️ Cảnh báo ở quá ${configuredStayTimeoutMin} phút`, "Lệnh từ Quản trị viên Web", "badge-warning", "Đã phát chuông nhắc nhở tới loa hộp 3020 4R 3W");
   } else if (cmd === 'RESET') {
-    currentAlertLevel = 0;
     addLogEntry("✅ Hủy trạng thái báo động", "Lệnh từ Quản trị viên Web", "badge-success", "Khôi phục trạng thái an toàn");
   }
 
   fetchDeviceStatus();
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function addLogEntry(action, detail, badgeClass, statusText) {
@@ -600,15 +691,23 @@ function addLogEntry(action, detail, badgeClass, statusText) {
   const timeStr = `${now.toLocaleTimeString('vi-VN')} - ${now.toLocaleDateString('vi-VN')}`;
   const shortTime = now.toLocaleTimeString('vi-VN');
 
+  const rawBadge = typeof badgeClass === 'string' ? badgeClass.trim() : '';
+  const safeBadgeClass = /^[a-z0-9_-]+$/i.test(rawBadge) ? rawBadge : 'badge-info';
+  const safeAction = escapeHtml(action);
+  const safeDetail = escapeHtml(detail);
+  const safeStatusText = escapeHtml(statusText);
+  const safeTimeStr = escapeHtml(timeStr);
+  const safeShortTime = escapeHtml(shortTime);
+
   // Thêm vào bảng Desktop
   if (logsBody) {
     const newRow = `
       <tr>
-        <td>${timeStr}</td>
+        <td>${safeTimeStr}</td>
         <td>Sa Bàn WC Thực Nghiệm</td>
-        <td><span class="badge ${badgeClass}">${action}</span></td>
-        <td>${detail}</td>
-        <td>${statusText}</td>
+        <td><span class="badge ${safeBadgeClass}">${safeAction}</span></td>
+        <td>${safeDetail}</td>
+        <td>${safeStatusText}</td>
       </tr>
     `;
     logsBody.insertAdjacentHTML('afterbegin', newRow);
@@ -619,18 +718,18 @@ function addLogEntry(action, detail, badgeClass, statusText) {
     const newCard = `
       <div class="log-card-item">
         <div class="log-card-top">
-          <span class="badge ${badgeClass}">${action}</span>
-          <span class="log-card-time">${shortTime}</span>
+          <span class="badge ${safeBadgeClass}">${safeAction}</span>
+          <span class="log-card-time">${safeShortTime}</span>
         </div>
-        <div class="log-card-detail">${detail}</div>
-        <div class="log-card-location">📍 ${statusText}</div>
+        <div class="log-card-detail">${safeDetail}</div>
+        <div class="log-card-location">📍 ${safeStatusText}</div>
       </div>
     `;
     mobileLogs.insertAdjacentHTML('afterbegin', newCard);
   }
 }
 
-function clearDemoLogs() {
+function clearActivityLogs() {
   const logsBody = document.getElementById('logsTableBody');
   const mobileLogs = document.getElementById('mobileLogsList');
   if (logsBody) {
@@ -652,61 +751,126 @@ function clearDemoLogs() {
 }
 
 // --- 10. ĐÀM THOẠI TRỰC TIẾP PUSH-TO-TALK ---
+function setupPttListeners() {
+  const btn = document.getElementById('btnPtt');
+  if (!btn) return;
+
+  if (typeof window.PointerEvent === 'function') {
+    btn.addEventListener('pointerdown', (e) => {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (e && e.pointerId !== undefined && typeof btn.setPointerCapture === 'function') {
+        try {
+          btn.setPointerCapture(e.pointerId);
+        } catch (_err) { /* ignore capture failure */ }
+      }
+      startPTT(e);
+    });
+    btn.addEventListener('pointerup', (e) => stopPTT(e));
+    btn.addEventListener('pointercancel', (e) => stopPTT(e));
+    btn.addEventListener('lostpointercapture', (e) => stopPTT(e));
+  } else {
+    btn.addEventListener('touchstart', (e) => {
+      lastTouchTimestamp = Date.now();
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      startPTT(e);
+    }, { passive: false });
+    btn.addEventListener('touchend', (e) => {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      stopPTT(e);
+    });
+    btn.addEventListener('touchcancel', (e) => stopPTT(e));
+    btn.addEventListener('mousedown', (e) => {
+      if (Date.now() - lastTouchTimestamp < 800) return;
+      startPTT(e);
+    });
+    btn.addEventListener('mouseup', (e) => stopPTT(e));
+    btn.addEventListener('mouseleave', (e) => stopPTT(e));
+  }
+}
+
 async function startPTT() {
+  if (isPttActive) return;
+  isPttActive = true;
+  const mySession = ++pttSessionId;
+
   const btn = document.getElementById('btnPtt');
   const label = document.getElementById('pttLabel');
   const hint = document.getElementById('pttHint');
 
-  btn.classList.add('active');
-  label.innerText = 'ĐANG NÓI...';
-  hint.innerText = 'Giọng nói đang truyền tới Loa hộp 4Ω 3W (3020)';
+  if (btn) btn.classList.add('active');
+  if (label) label.innerText = 'ĐANG NÓI...';
+  if (hint) hint.innerText = 'Giọng nói đang truyền tới Loa hộp 4Ω 3W (3020)';
 
   // Gửi tín hiệu báo hiệu đàm thoại xuống ESP32 để phát chuông chú ý tại loa sa bàn
-  fetch(`${apiBaseUrl}/api/status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      command: 'CHIME',
-      deviceId: 'RESTROOM_WC1_KHKT',
-      silentTelegram: true
-    })
-  }).catch(() => {});
+  postStatusCommand('CHIME', null, { silentTelegram: true }).catch((err) => {
+    console.warn("PTT CHIME error:", err.message);
+  });
 
   try {
     if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let acquiredStream = null;
+    if (!mediaStream) {
+      acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    if (!isPttActive || mySession !== pttSessionId) {
+      if (acquiredStream && typeof acquiredStream.getTracks === 'function') {
+        acquiredStream.getTracks().forEach((t) => t.stop());
+      }
+      return;
+    }
+    if (acquiredStream) {
+      mediaStream = acquiredStream;
+    }
 
     const source = audioContext.createMediaStreamSource(mediaStream);
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-    drawVisualizer();
-  } catch (err) {
-    drawSimulatedWave();
+    drawVisualizer(mySession);
+  } catch (_err) {
+    if (!isPttActive || mySession !== pttSessionId) return;
+    const canvas = document.getElementById('audioVisualizer');
+    if (canvas && typeof canvas.getContext === 'function') {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (hint) {
+      hint.innerText = 'Không truy cập được micro trình duyệt (đã gửi chuông chú ý CHIME tới loa ESP32)';
+    }
   }
 }
 
 function stopPTT() {
+  if (!isPttActive) return;
+  isPttActive = false;
+  pttSessionId++;
+
   const btn = document.getElementById('btnPtt');
   const label = document.getElementById('pttLabel');
   const hint = document.getElementById('pttHint');
 
-  btn.classList.remove('active');
-  label.innerText = 'NHẤN GIỮ ĐỂ NÓI';
-  hint.innerText = 'Chạm & giữ nút tròn để phát giọng nói';
+  if (btn) btn.classList.remove('active');
+  if (label) label.innerText = 'NHẤN GIỮ ĐỂ NÓI';
+  if (hint) hint.innerText = 'Chạm & giữ nút tròn để phát giọng nói';
 
   if (visualizerAnimationId) {
     cancelAnimationFrame(visualizerAnimationId);
     visualizerAnimationId = null;
   }
   const canvas = document.getElementById('audioVisualizer');
-  if (canvas) {
+  if (canvas && typeof canvas.getContext === 'function') {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 }
 
-function drawVisualizer() {
+function drawVisualizer(sessionId = pttSessionId) {
+  if (visualizerAnimationId) {
+    cancelAnimationFrame(visualizerAnimationId);
+    visualizerAnimationId = null;
+  }
+  if (!isPttActive || sessionId !== pttSessionId) return;
+
   const canvas = document.getElementById('audioVisualizer');
   if (!canvas || !analyser) return;
   const ctx = canvas.getContext('2d');
@@ -714,7 +878,14 @@ function drawVisualizer() {
   const dataArray = new Uint8Array(bufferLength);
 
   function renderFrame() {
-    visualizerAnimationId = requestAnimationFrame(renderFrame);
+    if (!isPttActive || sessionId !== pttSessionId) {
+      visualizerAnimationId = null;
+      return;
+    }
+    if (visualizerAnimationId) {
+      cancelAnimationFrame(visualizerAnimationId);
+      visualizerAnimationId = null;
+    }
     analyser.getByteFrequencyData(dataArray);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const barWidth = (canvas.width / bufferLength) * 2;
@@ -725,28 +896,9 @@ function drawVisualizer() {
       ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
       x += barWidth;
     }
+    visualizerAnimationId = requestAnimationFrame(renderFrame);
   }
   renderFrame();
-}
-
-function drawSimulatedWave() {
-  const canvas = document.getElementById('audioVisualizer');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let frame = 0;
-  function renderDummy() {
-    visualizerAnimationId = requestAnimationFrame(renderDummy);
-    frame++;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#ef4444';
-    const bars = 16;
-    const width = canvas.width / bars;
-    for (let i = 0; i < bars; i++) {
-      const h = Math.abs(Math.sin((frame * 0.1) + i)) * (canvas.height * 0.8) + 4;
-      ctx.fillRect(i * width, canvas.height - h, width - 4, h);
-    }
-  }
-  renderDummy();
 }
 
 // Đăng ký toàn cục các hàm sự kiện giao diện
@@ -756,11 +908,14 @@ window.sendQuickCommand = sendQuickCommand;
 window.saveWebSettings = saveWebSettings;
 window.triggerResetWiFi = triggerResetWiFi;
 window.triggerRebootESP = triggerRebootESP;
-window.clearDemoLogs = clearDemoLogs;
+window.clearActivityLogs = clearActivityLogs;
 window.startPTT = startPTT;
 window.stopPTT = stopPTT;
 
 // Khởi chạy khi DOM sẵn sàng
 document.addEventListener('DOMContentLoaded', () => {
   setupSliderListeners();
+  setupPttListeners();
+  updateDynamicThresholdLabels();
+  updateHardwareControlsState(isEsp32Online);
 });

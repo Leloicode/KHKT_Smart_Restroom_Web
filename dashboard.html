@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Bảng Điều Khiển Giám Sát An Toàn WC Học Đường 24/7 | KHKT 2026-2027</title>
-  <link rel="stylesheet" href="css/style.css?v=20261117_LIVE_3">
+  <link rel="stylesheet" href="css/style.css?v=20261118_LIVE_4">
 </head>
 <body>
 
@@ -135,7 +135,7 @@
         <!-- 3. Cảm biến thời gian ở trong WC -->
         <div class="metric-card" id="cardStayTime">
           <div class="metric-header">
-            <span class="metric-title">THỜI GIAN Ở TRONG WC (>10P)</span>
+            <span class="metric-title">THỜI GIAN Ở TRONG WC (<span id="lblStayMetricRule">&gt;10P</span>)</span>
             <div class="metric-icon-circle icon-purple">⏱️</div>
           </div>
           <div class="metric-value" id="valStayTime">00:00 <small id="valStayLimit">/ 10p</small></div>
@@ -152,7 +152,7 @@
             <div class="metric-icon-circle icon-indigo">👥</div>
           </div>
           <div class="metric-value" id="valOccupancy">0 <small>học sinh</small></div>
-          <div class="metric-subtitle" id="valPresence">PIR: Phòng trống</div>
+          <div class="metric-subtitle" id="valPresence">PIR: Khu vực WC trống</div>
           <div class="gauge-bar-bg">
             <div id="barOccupancy" class="gauge-bar-fill" style="width: 0%; background-color: var(--primary);"></div>
           </div>
@@ -169,7 +169,7 @@
           </p>
 
           <div class="ptt-container">
-            <button id="btnPtt" class="btn-ptt" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT()" ontouchend="stopPTT()">
+            <button id="btnPtt" type="button" class="btn-ptt">
               <span class="btn-ptt-icon">🎙️</span>
               <span class="btn-ptt-label" id="pttLabel">NHẤN GIỮ ĐỂ NÓI</span>
             </button>
@@ -206,27 +206,27 @@
         </div>
       </div>
 
-      <!-- BỘ CÔNG CỤ THỬ NGHIỆM MÔ PHỎNG (DÀNH CHO GIÁM KHẢO & THẦY CÔ TEST) -->
-      <div class="card demo-test-card">
-        <div class="demo-test-header">
+      <!-- BỘ CÔNG CỤ KIỂM TRA PHẦN CỨNG SA BÀN TRỰC TIẾP (CHỈ KHI ESP32 TRỰC TUYẾN) -->
+      <div class="card hardware-test-card" id="hardwareTestCard">
+        <div class="hardware-test-header">
           <div>
-            <h3 class="demo-test-title">🧪 Thử Nghiệm Mô Phỏng Sự Cố Phần Cứng (Demo Sa Bàn)</h3>
-            <p class="demo-test-desc">Bấm nhanh các nút dưới đây để kích hoạt cảnh báo trên Web đồng thời <strong>gửi lệnh tái hiện trực tiếp xuống phần cứng sa bàn</strong> (Còi hú, loa phát, đèn chớp đỏ thật 100%):</p>
+            <h3 class="hardware-test-title">🎛️ Kiểm Tra Tín Hiệu Phần Cứng Sa Bàn (ESP32 Trực Tiếp)</h3>
+            <p class="hardware-test-desc">Gửi lệnh kiểm tra trực tiếp tới còi hú, loa I2S MAX98357A và LED đỏ trên sa bàn thực tế (chỉ khả dụng khi ESP32 trực tuyến, hoàn toàn không tạo dữ liệu giả lập).</p>
           </div>
-          <span class="badge badge-info">Dành Cho Trình Chiếu</span>
+          <span id="hardwareTestBadge" class="badge badge-warning">Chờ ESP32 trực tuyến</span>
         </div>
-        <div class="demo-buttons-row">
-          <button type="button" class="btn-demo btn-demo-violence" onclick="simulateIncident('violence')">
-            <span>🚨</span> Thử Dấu Hiệu Cãi Vã / Bạo Lực
+        <div class="hardware-buttons-row">
+          <button type="button" class="btn-hw btn-hw-violence" data-hw-btn="true" disabled onclick="triggerHardwareTest('SIREN')">
+            <span>🚨</span> Kiểm Tra Còi Báo Bạo Lực
           </button>
-          <button type="button" class="btn-demo btn-demo-smoke" onclick="simulateIncident('smoke')">
-            <span>🚬</span> Thử Dấu Hiệu Khói Thuốc Lá
+          <button type="button" class="btn-hw btn-hw-smoke" data-hw-btn="true" disabled onclick="triggerHardwareTest('SMOKE')">
+            <span>🚬</span> Kiểm Tra Cảnh Báo Khói
           </button>
-          <button type="button" class="btn-demo btn-demo-overtime" onclick="simulateIncident('overtime')">
-            <span>⏱️</span> Thử Ở Quá 10 Phút
+          <button type="button" class="btn-hw btn-hw-overtime" data-hw-btn="true" disabled onclick="triggerHardwareTest('OVERTIME')">
+            <span>⏱️</span> Kiểm Tra Nhắc Ở Quá <span id="lblHwOvertimeMin">10</span> Phút
           </button>
-          <button type="button" class="btn-demo btn-demo-reset" onclick="simulateIncident('reset')">
-            <span>🔄</span> Khôi Phục Dữ Liệu Thực
+          <button type="button" class="btn-hw btn-hw-reset" data-hw-btn="true" disabled onclick="triggerHardwareTest('RESET')">
+            <span>✅</span> Tắt Báo Động &amp; Khôi Phục Bình Thường
           </button>
         </div>
       </div>
@@ -235,7 +235,7 @@
       <div class="card logs-card">
         <div class="card-header-row">
           <h2 class="card-title" style="margin-bottom: 0;">📋 Nhật Ký Hoạt Động & Sự Cố</h2>
-          <button onclick="clearDemoLogs()" class="btn-clear-logs">
+          <button onclick="clearActivityLogs()" class="btn-clear-logs">
             Xóa nhật ký
           </button>
         </div>
@@ -395,6 +395,6 @@
     Hệ Thống Giám Sát An Toàn Nhà Vệ Sinh Học Đường • <strong>Trường THCS Nguyễn Công Trứ</strong>
   </footer>
 
-  <script src="js/app.js?v=20261117_REAL_HARDWARE_READY"></script>
+  <script src="js/app.js?v=20261118_LIVE_4"></script>
 </body>
 </html>

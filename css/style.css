@@ -517,6 +517,8 @@ body {
   transition: all 0.2s;
   outline: none;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
 
 .btn-ptt:hover {
@@ -1018,8 +1020,13 @@ body {
 }
 
 /* ========================================================================== */
-/* THẺ TRẠNG THÁI AN NINH TỔNG THỂ & BỘ DEMO TEST                             */
+/* THẺ TRẠNG THÁI AN NINH TỔNG THỂ & KIỂM TRA PHẦN CỨNG SA BÀN               */
 /* ========================================================================== */
+@keyframes pulseBorder {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+  100% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
 .security-status-card {
   border-radius: var(--radius);
   padding: 16px 20px;
@@ -1125,12 +1132,12 @@ body {
   white-space: nowrap;
 }
 
-.demo-test-card {
+.hardware-test-card {
   margin-top: 20px;
   background: #f8fafc;
-  border: 1.5px dashed #cbd5e1;
+  border: 1.5px solid #cbd5e1;
 }
-.demo-test-header {
+.hardware-test-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1138,22 +1145,22 @@ body {
   gap: 8px;
   margin-bottom: 12px;
 }
-.demo-test-title {
+.hardware-test-title {
   font-size: 1rem;
   font-weight: 700;
   color: #1e293b;
 }
-.demo-test-desc {
+.hardware-test-desc {
   font-size: 0.85rem;
   color: #64748b;
   margin-top: 2px;
 }
-.demo-buttons-row {
+.hardware-buttons-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
-.btn-demo {
+.btn-hw {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1165,39 +1172,45 @@ body {
   border: 1px solid transparent;
   transition: all 0.2s;
 }
-.btn-demo:hover {
+.btn-hw:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
-.btn-demo-violence {
+.btn-hw:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn-hw-violence {
   background: #fee2e2;
   color: #991b1b;
   border-color: #fca5a5;
 }
-.btn-demo-violence:hover {
+.btn-hw-violence:hover:not(:disabled) {
   background: #fecaca;
 }
-.btn-demo-smoke {
+.btn-hw-smoke {
   background: #ffedd5;
   color: #9a3412;
   border-color: #fdba74;
 }
-.btn-demo-smoke:hover {
+.btn-hw-smoke:hover:not(:disabled) {
   background: #fed7aa;
 }
-.btn-demo-overtime {
+.btn-hw-overtime {
   background: #fef3c7;
   color: #92400e;
   border-color: #fcd34d;
 }
-.btn-demo-overtime:hover {
+.btn-hw-overtime:hover:not(:disabled) {
   background: #fde68a;
 }
-.btn-demo-reset {
+.btn-hw-reset {
   background: #f1f5f9;
   color: #475569;
   border-color: #cbd5e1;
 }
-.btn-demo-reset:hover {
+.btn-hw-reset:hover:not(:disabled) {
   background: #e2e8f0;
 }
